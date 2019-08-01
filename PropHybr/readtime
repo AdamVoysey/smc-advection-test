@@ -1,0 +1,19 @@
+#!/usr/bin/ksh
+
+##  Find out job timing statistics from given list
+##  Usage:  ls -t | readtime
+##
+##  First created:   Jian-Guo Li    16 Jul 2008
+##  Last modified:   Jian-Guo Li     5 Apr 2011
+
+while read fff
+do
+#  ls -l  $fff
+#  egrep 'Starting time|Ending time' $fff
+   egrep 'Run at |Elapsed Time'  $fff
+#  egrep 'Run at |CPU Tot:'  $fff
+#  egrep 'Elapsed time : |Elapsed: ' $fff
+done
+
+exit 0
+

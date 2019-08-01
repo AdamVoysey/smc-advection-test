@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+#PBS -N smcrHybMed
+#PBS -q normal
+#PBS -l select=1:coretype=broadwell
+#PBS -l walltime=03:00:00
+#PBS -j oe
+
+##-----------------------------------------------------------------------------
+#
+# Description:  Cray XC40 script to test Hybrid parallelisation in UK12H model
+# 
+# First Created:    Jian-Guo Li  22 Nov 2017
+# Last modified:    Jian-Guo Li  22 Jul 2019
+#------------------------------------------------------------------------------
+
+######################### Set up directories ##################################
+ RUNDIR='/data/d02/frjl/PropHybr'
+ CODDIR='/data/d02/frjl/PropHybr/CodSrc'
+ OUTDIR='/data/d02/frjl/PropHybr/OutDat'
+ SCRDIR="/scratch/d02/frjl/tsthyb"
+
+################# Set mandatory WW3 environment variables #####################
+ export OMP_NUM_THREADS=36
+#export OMP_NUM_THREADS=18
+#export OMP_NUM_THREADS=9
+#export OMP_NUM_THREADS=3
+
+############### Change to scratch directory for this run ######################
+cd $SCRDIR
+CC=$?
+if test $CC -ne 0
+then
+ mkdir $SCRDIR
+ cd    $SCRDIR
+fi
+
+echo "Clearing working dir `pwd`"
+rm -f $SCRDIR/*
+
+####### Copy executable and input files to scratch dir #######################
+echo "Copy executables and input files ..."
+cp $CODDIR/WRfrctnHyb            ./
+
+ls -l
+
+################ Run program and save output if any ######################
+ echo " *** WRfrctnHyb *** "
+
+#aprun -n 120 -N 4  -ss -S 2 -d 9  -j 1 ./WRfrctnHyb
+#aprun -n 4   -N 4  -ss -S 2 -d 9  -j 1 ./WRfrctnHyb
+#aprun -n 360 -N 12 -ss -S 6 -d 3  -j 1 ./WRfrctnHyb
+#aprun -n 12  -N 12 -ss -S 6 -d 3  -j 1 ./WRfrctnHyb
+#aprun -n 2   -N 2  -ss -S 1 -d 18 -j 1 ./WRfrctnHyb
+ aprun -n 1   -N 1  -ss      -d 36 -j 1 ./WRfrctnHyb
+
+#
+  CC=$?
+  if test $CC -ne 0
+  then
+    echo " *** WRfrctnHyb Crash !!! *** "
+  else
+##  Save output C* files if any.
+    echo " Copying WRfrctnHyb output files ..."
+    ls -l *
+    cp -p C*  $OUTDIR/
+  fi
+
+#######################################################################
+# Submit GLBWW3 run script into queue:
+ cd $RUNDIR 
+ echo " WRfrctnHyb completed. "
+
+ echo " *** END *** "
+
+exit 0
+
