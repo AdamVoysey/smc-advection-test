@@ -15,10 +15,10 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
-export RUNDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr'
-export CODDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr/CodSrc'
-export OUTDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr/OutDat'
-export SCRDIR="/tmp/avoysey/tsthyb/"
+export RUNDIR='${HOME}/WW3-smc/smc-advection-test/PropHybr'
+export CODDIR='${RUNDIR}/CodSrc'
+export OUTDIR='${RUNDIR}/OutDat'
+export SCRDIR="/tmp/${USER}/tsthyb/"
 
 ################# Set mandatory WW3 environment variables #####################
 export OMP_NUM_THREADS=10
@@ -31,7 +31,7 @@ cd $SCRDIR
 CC=$?
 if test $CC -ne 0
 then
- mkdir $SCRDIR
+ mkdir -p $SCRDIR
  cd    $SCRDIR
 fi
 
