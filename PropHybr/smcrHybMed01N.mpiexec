@@ -15,14 +15,14 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
-export RUNDIR='/data/d02/frjl/PropHybr'
-export CODDIR='/data/d02/frjl/PropHybr/CodSrc'
-export OUTDIR='/data/d02/frjl/PropHybr/OutDat'
-export SCRDIR="/scratch/d02/frjl/tsthyb"
+export RUNDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr'
+export CODDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr/CodSrc'
+export OUTDIR='/home/mo-avoysey/WW3-smc/smc-advection-test/PropHybr/OutDat'
+export SCRDIR="/tmp/avoysey/tsthyb/"
 
 ################# Set mandatory WW3 environment variables #####################
- export OMP_NUM_THREADS=40
-export OMP_PROC_BIND="close"
+export OMP_NUM_THREADS=10
+export OMP_PROC_BIND="spread"
 export OMP_PLACES="cores"
 export OMP_WAIT_POLICY="active"
 
@@ -47,8 +47,7 @@ ls -l
 
 ################ Run program and save output if any ######################
  echo " *** WRfrctnHyb *** "
-
-mpiexec -n 1 -cpus-per-proc $OMP_NUM_THREADS ./WRfrctnHyb
+mpiexec -n 4 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
 
 #
   CC=$?
