@@ -82,7 +82,7 @@
        CHARACTER(LEN=10):: CDate, CTime
 
 !  Cell and face array files.
-       CHARACTER(Len=36) :: CelPath='/data/d02/frjl/PropHybr/DatGMC/'
+       CHARACTER(Len=256) :: CelPath='./'
        CHARACTER(LEN=26)::  CelFile='Med36125Cel0.dat', &
         &                   ISdFile='Med325GISide.dat', &
         &                   JSdFile='Med325GJSide.dat', &  
