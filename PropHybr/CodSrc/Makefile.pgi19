@@ -5,7 +5,7 @@
 ##
 
 FC = mpif90
-FCFLAGS = 
+FCFLAGS =-mp 
 CPPFLAGS= 
 
 .DEFAULT_GOAL := WRfrctnHyb
