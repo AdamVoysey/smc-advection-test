@@ -95,6 +95,8 @@
       REAL                    :: DTLOC, CGCOS, CGSIN, FUTRN, FVTRN,   &
                                  DFRR, DX0I, DY0I, CGD, DSSD,ARCTH,   &
                                  DNND, DCELL, XWIND, TFAC, DSS, DNN
+
+      REAL :: t1,t2
 !/
 !/ Automatic work arrays
 !
@@ -246,6 +248,7 @@
 !
 ! 3.  Loop over frequency-dependent sub-steps -------------------------*
 !
+
        DO ITLOC=1, NTLOC
 !
 !     Initialise net flux arrays.
@@ -268,6 +271,9 @@
 !
 ! 3.c    Calculate this level only if size is factor of LMN 
            IF( MOD(LMN, LvR) .EQ. 0 ) THEN
+
+t1 = MPI_WTIME()
+
 !
 ! 3.d    Select cell and face ranges 
            icl=NRLCel(LL-1)+1
@@ -307,6 +313,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update in D and advective update in C
 !  The side length in MF value has to be cancelled with cell y-length.
 !  Also divided by another cell x-size as UCFL is in size-1 unit.
@@ -343,6 +350,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update of D in C
 !  The v side length in MF value has to be cancelled with x-size. 
 !  Also divided by cell y-size as VCFL is in size-1 unit.
@@ -356,6 +364,11 @@
 !  End of refine level if block  MOD(LMN, LvR) .EQ. 0 
            ENDIF
 
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN 
+write (6,*) "Inner Time = ",(t2-t1)
+end if
+
 !  End of refine level loop LL=1, MRL
            ENDDO
 !!
@@ -364,7 +377,7 @@
 
 !!    End of ITLOC DO
        ENDDO
- 
+
 !  Average with 1-2-1 scheme.  JGLi20Aug2015
        IF(FVERG) CALL SMCAverg(CQ)
 

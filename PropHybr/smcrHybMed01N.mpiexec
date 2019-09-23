@@ -15,9 +15,9 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
-export RUNDIR='${HOME}/WW3-smc/smc-advection-test/PropHybr'
-export CODDIR='${RUNDIR}/CodSrc'
-export OUTDIR='${RUNDIR}/OutDat'
+export RUNDIR="${HOME}/WW3-smc/smc-advection-test/PropHybr"
+export CODDIR="${RUNDIR}/CodSrc"
+export OUTDIR="${RUNDIR}/OutDat"
 export SCRDIR="/tmp/${USER}/tsthyb/"
 
 ################# Set mandatory WW3 environment variables #####################
