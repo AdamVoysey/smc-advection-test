@@ -95,6 +95,8 @@
       REAL                    :: DTLOC, CGCOS, CGSIN, FUTRN, FVTRN,   &
                                  DFRR, DX0I, DY0I, CGD, DSSD,ARCTH,   &
                                  DNND, DCELL, XWIND, TFAC, DSS, DNN
+
+      REAL :: t1,t2
 !/
 !/ Automatic work arrays
 !
@@ -188,13 +190,13 @@
 
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
+!$ACC Kernels
       DO ISEA=1, NSEA
 !Li  Transported variable is divided by CG as in WW3 (???)
-         CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
+        CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
 !Li  Resetting NaNQ VQ to zero if any.   JGLi18Mar2013
-         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
+        IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
-!$OMP END Parallel DO
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
@@ -236,7 +238,8 @@
          DO ISEA=1, NSEA
             UCFL(ISEA) = DTLDX*CXTOT(ISEA)/CLATS(ISEA)
             VCFL(ISEA) = DTLDY*CYTOT(ISEA) 
-         ENDDO 
+         ENDDO
+!$ACC End Kernels 
 !$OMP END Parallel DO
 
 !Li  Initialise boundary cell CQ and Velocity values.
@@ -246,6 +249,9 @@
 !
 ! 3.  Loop over frequency-dependent sub-steps -------------------------*
 !
+
+t1 = MPI_WTIME()
+
        DO ITLOC=1, NTLOC
 !
 !     Initialise net flux arrays.
@@ -268,6 +274,7 @@
 !
 ! 3.c    Calculate this level only if size is factor of LMN 
            IF( MOD(LMN, LvR) .EQ. 0 ) THEN
+
 !
 ! 3.d    Select cell and face ranges 
            icl=NRLCel(LL-1)+1
@@ -307,6 +314,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update in D and advective update in C
 !  The side length in MF value has to be cancelled with cell y-length.
 !  Also divided by another cell x-size as UCFL is in size-1 unit.
@@ -343,6 +351,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update of D in C
 !  The v side length in MF value has to be cancelled with x-size. 
 !  Also divided by cell y-size as VCFL is in size-1 unit.
@@ -364,7 +373,12 @@
 
 !!    End of ITLOC DO
        ENDDO
- 
+
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Inner Time = ",(t2-t1)
+end if
+
 !  Average with 1-2-1 scheme.  JGLi20Aug2015
        IF(FVERG) CALL SMCAverg(CQ)
 
@@ -651,6 +665,8 @@
 !    proportion of flux into the cells.  This length will be removed by the
 !    cell length when the tracer concentration is updated.
 
+!$ACC Kernels 
+!$ACC Loop independent 
       DO i=NUA, NUB
 
 !    Select Upstream, Central and Downstream cells
@@ -717,6 +733,7 @@
 
       END DO
 
+!$ACC END Kernels 
 !$OMP END DO
 
 !$OMP END Parallel 
@@ -759,6 +776,8 @@
 !$ !  ENDIF
 
 !$OMP DO
+!$ACC Kernels
+!$ACC Loop independent
 
       DO j=NVA, NVB
 
@@ -832,6 +851,7 @@
          FY(j)=CNST0*CNST5*CNST8
 
       END DO
+!$ACC END Kernels
 
 !$OMP END DO
 

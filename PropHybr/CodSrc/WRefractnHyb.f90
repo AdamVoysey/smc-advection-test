@@ -35,6 +35,8 @@
        call MPI_COMM_SIZE(MPI_COM, nprocs, ierr)
        call mpi_comm_rank(MPI_COM, myrank, ierr)
 
+       CALL get_environment_variable("SCRDIR", CelPath)
+
 !  Setup allocatable arrays for broadcast among ranks
        ALLOCATE( INTALLOC(15), INTALLO2(0:MRL, 3), STAT=malloc )
 
@@ -396,9 +398,16 @@
 !!  Parallelised spectral loop for each rank
 ! SpcLop:  DO  NP=npstar, npsend
 !!  Select assigned spectral components for own rank.
+
+!$ACC data copy(clats,WSpc,CGrp), &
+!$ACC  copy(isd), &
+!$ACC  copy(ice), &
+!$ACC  copy(clatf), &
+!$ACC  copy(jsd)
+
   SpcLop:  DO NP=1, NSpc
               IF( IAPPRO(NP) .EQ. myrank+1 ) THEN 
-                  NF=NP/NDir
+                  NF=(NP+NDIR-1)/NDir
                   ND=MOD(NP, NDir) + 1
 !!    Propagation for the given spectral component
                   CALL W3PSMC( ND, NF, NT )           
@@ -408,6 +417,7 @@
 
 !!    End of spectral loops
            ENDDO  SpcLop
+!$ACC End Data
 
 !!    Wait all ranks finish their spatial propagation for 
 !!    all their assigned spectral components.
@@ -1237,7 +1247,7 @@
 
        OPEN(UNIT=8, FILE=TRIM(CelPath)//TRIM(CelFile),  &
                     STATUS='OLD',IOSTAT=nn,ACTION='READ')
-       IF(nn /= 0) PRINT*, CelFile//' was not opened! '
+       IF(nn /= 0) PRINT*, TRIM(CelPath)//TRIM(CelFile)//' was not opened! '
           READ (8,*) NGLo, NRLCel(1:MRL) 
        DO J=1,NGLo
           READ (8,*) ICE(1,J), ICE(2,J), ICE(3,J), ICE(4,J), ICE(5,J)

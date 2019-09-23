@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+#PBS -N smcrHybMed
+#PBS -q normal
+#PBS -l select=1:coretype=broadwell
+#PBS -l walltime=03:00:00
+#PBS -j oe
+
+##-----------------------------------------------------------------------------
+#
+# Description:  Cray XC40 script to test Hybrid parallelisation in UK12H model
+# 
+# First Created:    Jian-Guo Li  22 Nov 2017
+# Last modified:    Jian-Guo Li  22 Jul 2019
+#------------------------------------------------------------------------------
+
+######################### Set up directories ##################################
+export RUNDIR="${HOME}/miniapp_smc/smc-advection-test/PropHybr"
+export CODDIR="${RUNDIR}/CodSrc"
+export OUTDIR="${RUNDIR}/OutDat"
+export SCRDIR="/tmp/${USER}/tsthyb/"
+
+################# Set mandatory WW3 environment variables #####################
+export OMP_NUM_THREADS=10
+export OMP_PROC_BIND=${OMP_PROC_BIND:-"spread"}
+export OMP_PLACES=${OMP_PLACES:-"cores"}
+export OMP_WAIT_POLICY=${OMP_WAIT_POLICY:-"active"}
+
+############### Change to scratch directory for this run ######################
+cd $SCRDIR
+CC=$?
+if test $CC -ne 0
+then
+ mkdir -p $SCRDIR
+ cd    $SCRDIR
+fi
+
+echo "Clearing working dir `pwd`"
+rm -f $SCRDIR/*
+
+####### Copy executable and input files to scratch dir #######################
+echo "Copy executables and input files ..."
+cp $RUNDIR/DatGMC/* ./
+cp $CODDIR/WRfrctnHyb            ./
+
+ls -l
+
+################ Run program and save output if any ######################
+ echo " *** WRfrctnHyb *** "
+mpiexec -n 4 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
+
+#
+  CC=$?
+  if test $CC -ne 0
+  then
+    echo " *** WRfrctnHyb Crash !!! *** "
+  else
+##  Save output C* files if any.
+    echo " Copying WRfrctnHyb output files ..."
+    ls -l *
+    mkdir -p $OUTDIR/
+    cp -p C*  $OUTDIR/
+  fi
+
+#######################################################################
+# Submit GLBWW3 run script into queue:
+ cd $RUNDIR 
+ echo " WRfrctnHyb completed. "
+
+ echo " *** END *** "
+
+exit 0
+
