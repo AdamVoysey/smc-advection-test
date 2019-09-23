@@ -249,6 +249,8 @@
 ! 3.  Loop over frequency-dependent sub-steps -------------------------*
 !
 
+t1 = MPI_WTIME()
+
        DO ITLOC=1, NTLOC
 !
 !     Initialise net flux arrays.
@@ -271,8 +273,6 @@
 !
 ! 3.c    Calculate this level only if size is factor of LMN 
            IF( MOD(LMN, LvR) .EQ. 0 ) THEN
-
-t1 = MPI_WTIME()
 
 !
 ! 3.d    Select cell and face ranges 
@@ -364,11 +364,6 @@ t1 = MPI_WTIME()
 !  End of refine level if block  MOD(LMN, LvR) .EQ. 0 
            ENDIF
 
-t2 = MPI_WTIME()
-if (t2-t1>0) THEN 
-write (6,*) "Inner Time = ",(t2-t1)
-end if
-
 !  End of refine level loop LL=1, MRL
            ENDDO
 !!
@@ -377,6 +372,11 @@ end if
 
 !!    End of ITLOC DO
        ENDDO
+
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Inner Time = ",(t2-t1)
+end if
 
 !  Average with 1-2-1 scheme.  JGLi20Aug2015
        IF(FVERG) CALL SMCAverg(CQ)
