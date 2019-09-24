@@ -96,7 +96,7 @@
                                  DFRR, DX0I, DY0I, CGD, DSSD,ARCTH,   &
                                  DNND, DCELL, XWIND, TFAC, DSS, DNN
 
-      REAL :: t1,t2
+      REAL :: t1,t2,t3,t4
 !/
 !/ Automatic work arrays
 !
@@ -188,6 +188,7 @@
       ULCFLX = 0.
       VLCFLY = 0.
 
+t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
 !$ACC Kernels
@@ -198,6 +199,10 @@
         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
 !$OMP END PARALLEL DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 1 Time = ",(t2-t1)
+end if
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
@@ -209,12 +214,17 @@
 !$OMP END Parallel DO
       ELSE
 !Li   No current case use group speed only.
+t1 = MPI_WTIME()
 !$OMP Parallel DO
          DO ISEA=1, NSEA
             CXTOT(ISEA) =  CGCOS * CGrp(IK,ISEA) 
             CYTOT(ISEA) =  CGSIN * CGrp(IK,ISEA)
          END DO
 !$OMP END Parallel DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 2 Time = ",(t2-t1)
+end if
 !Li   End of IF( FLCUR ) block.
       ENDIF
 
@@ -234,6 +244,7 @@
          IF(NPol .GT. 0) CYTOT(NSEA-NPol+1:NSEA) = 0.0
       ENDIF 
 
+t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li     Convert velocity components into CFL factors.
          DO ISEA=1, NSEA
@@ -242,6 +253,11 @@
          ENDDO
 !$ACC End Kernels 
 !$OMP END Parallel DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 3 Time = ",(t2-t1)
+end if
+
 
 !Li  Initialise boundary cell CQ and Velocity values.
            CQ(-9:0)=0.0
@@ -290,7 +306,13 @@ t1 = MPI_WTIME()
 !          CALL SMCxUNO3(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
 !          ELSE
 !  Call SMCxUNO2 to calculate finest level (size-1) MFx value
+t3 = MPI_WTIME()
            CALL SMCxUNO2(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
+t4 = MPI_WTIME()
+if (t3-t4>0) THEN
+write (6,*) "Kernel SMCxUNO2 Time = ",(t3-t4)
+end if
+
 !          ENDIF
 
 !  Store fineset level conservative flux in FCNt advective one in AFCN
@@ -332,7 +354,13 @@ t1 = MPI_WTIME()
 !          CALL SMCyUNO3(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
 !          ELSE
 !  Call SMCyUNO2 to calculate MFy value
+t3 = MPI_WTIME()
            CALL SMCyUNO2(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
+t4 = MPI_WTIME()
+if (t3-t4>0) THEN
+write (6,*) "Kernel SMCyUNO2 Time = ",(t3-t4)
+end if
+
 !          ENDIF
 !
 !  Store conservative flux in F
