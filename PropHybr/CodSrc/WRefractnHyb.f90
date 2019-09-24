@@ -26,7 +26,7 @@
        IMPLICIT NONE
 
        REAL:: CNST, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6, CNST8
-       REAL (Kind=8) :: TM1, TM2
+       REAL (Kind=8) :: TM1, TM2, GTM1, GTM2
 
 ! Initialize MPI with threading
        call MPI_INIT_THREAD(required, provided, ierr)
@@ -353,6 +353,7 @@
        CALL DATE_AND_TIME(CDate, CTime)
        WRITE(UNIT=16,FMT="(1x,' Loop start time',A10)") CTime 
        WRITE(UNIT= 6,FMT="(1x,' Loop start time',A10)") CTime 
+!      GTM1 = REAL(CTime)
 
 !!  End of rank 0 write out to message file.
        endif
@@ -398,9 +399,16 @@
 !!  Parallelised spectral loop for each rank
 ! SpcLop:  DO  NP=npstar, npsend
 !!  Select assigned spectral components for own rank.
+
+!$ACC data copy(clats,WSpc,CGrp), &
+!$ACC  copy(isd), &
+!$ACC  copy(ice), &
+!$ACC  copy(clatf), &
+!$ACC  copy(jsd)
+
   SpcLop:  DO NP=1, NSpc
               IF( IAPPRO(NP) .EQ. myrank+1 ) THEN 
-                  NF=NP/NDir
+                  NF=(NP+NDIR-1)/NDir
                   ND=MOD(NP, NDir) + 1
 !!    Propagation for the given spectral component
                   CALL W3PSMC( ND, NF, NT )           
@@ -410,6 +418,7 @@
 
 !!    End of spectral loops
            ENDDO  SpcLop
+!$ACC End Data
 
 !!    Wait all ranks finish their spatial propagation for 
 !!    all their assigned spectral components.
@@ -584,8 +593,11 @@
 
        if (myrank .eq. 0) then
        CALL DATE_AND_TIME(CDate, CTime)
+!      GTM2 = REAL(CTime)
        WRITE(UNIT= 6,FMT="(1x,' End time date ',A10,2x,A10)") CTime, CDate
        WRITE(UNIT=16,FMT="(1x,' End time date ',A10,2x,A10)") CTime, CDate
+!      WRITE(UNIT= 6,FMT="(1x,' Net time date ',F10.1,A10)") GTM2-GTM1, CDate
+!      WRITE(UNIT=16,FMT="(1x,' Net time date ',F10.1,A10)") GTM2-GTM1, CDate
        WRITE(UNIT=16,FMT="(1x)") 
 !!  End of rank 0 write out CTIME.
        endif
