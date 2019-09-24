@@ -29,7 +29,7 @@
        REAL (Kind=8) :: TM1, TM2, GTM1, GTM2
 
        REAL :: t1,t2
-
+!  !$ACC Routine(w3krtn) SEQ
 ! Initialize MPI with threading
        call MPI_INIT_THREAD(required, provided, ierr)
        MPI_COM = MPI_COMM_WORLD
@@ -396,6 +396,12 @@
         ENDIF
 
 !!    Space propagation for every spectral component.
+!$ACC data copy(clats,WSpc,CGrp), &
+!$ACC  copy(isd), &
+!$ACC  copy(ice), &
+!$ACC  copy(clatf), &
+!$ACC  copy(jsd)
+
        IF ( FLCXY ) THEN
 
 !!  Parallelised spectral loop for each rank
@@ -404,16 +410,10 @@
 
 t1 = MPI_WTIME()
 
-!$ACC data copy(clats,WSpc,CGrp), &
-!$ACC  copy(isd), &
-!$ACC  copy(ice), &
-!$ACC  copy(clatf), &
-!$ACC  copy(jsd)
-
   SpcLop:  DO NP=1, NSpc
               IF( IAPPRO(NP) .EQ. myrank+1 ) THEN 
                   NF=(NP+NDIR-1)/NDir
-                  ND=MOD(NP, NDir) + 1
+                  ND=MOD(NP-1, NDir) + 1
 !!    Propagation for the given spectral component
                   CALL W3PSMC( ND, NF, NT )           
 
@@ -422,7 +422,7 @@ t1 = MPI_WTIME()
 
 !!    End of spectral loops
            ENDDO  SpcLop
-!$ACC End Data
+
 
 t2 = MPI_WTIME()
 if (t2-t1>0) THEN
@@ -436,28 +436,36 @@ end if
 !!   Distribute propagation results to other ranks.
   Dislop:  DO NP=1, NSpc
               NN = IAPPRO(NP)
-              NF=NP/NDir
-              ND=MOD(NP, NDir) + 1
+              NF=(NP+NDIR-1)/NDir
+              ND=MOD(NP-1, NDir) + 1
 !!    Save propagated spectral component in one array and broadcast to others
+!$ACC data copy(REALandN(:,NN))
+              write(*,*) "NN,ND, NF",nn,nd,nf
               IF( NN .EQ. myrank+1 ) THEN
+!$ACC Kernels
                   REALandN(:,NN)=WSpc(ND, NF, :)
+!$ACC End kernels
               ENDIF
+!$ACC End data
 
 !!    Wait the specific rank to finish its propagation results assignment.
               CALL MPI_BARRIER(MPI_COM, ierr)
 
 !!   Broadcast to all other ranks from each rank.
               CALL MPI_Bcast(REALandN(1, NN), NCL , MPI_REAL, NN-1, MPI_COM, ierr)
+!$ACC data copyin(REALandN(:,NN))
+!$ACC Kernels
               IF( myrank + 1 .NE. NN ) THEN
                 WSpc( ND, NF, : ) = REALandN(:, NN) 
               ENDIF
+!$ACC End kernels
+!$ACC End data
 
 !!    Wait all ranks finish their propagation results storage.
               CALL MPI_BARRIER(MPI_COM, ierr)
 
 !!    End of distribution loops
            ENDDO  DisLop
-
 !!    End of spatial propagation FLCXY block.
        ENDIF 
 
@@ -470,16 +478,18 @@ end if
 ! CelLop:  DO  NE=1, NC-NPol
 !!  New distributed local loop for individual rank.  Note the subroutines 
 !!  SMCkUNO2 and SMCGtCrfr called in W3KRTN are OpenMP parallelised.  JGLi10Jul2019
-  CelLop:  DO  NE=npseatr, npseand
+! !$ACC Kernels
+! CelLop:  DO  NE=npseatr, npseand
 
 !!    Great circle turning (GCT) for lower part cells at 4 times of substeps,
 !!    Extended to include Arctic part if any
 !      CALL GMCGtCrTn(1, NC, MRFct)
-       CALL W3KRTN( NE, NT )
+!      CALL W3KRTN( NE, NT )
+       CALL W3KRTN( NT )
 
 !!    End of refraction cell loop.
-           ENDDO  CelLop
-
+!          ENDDO  CelLop
+! !$ACC End kernels
 !!    Wait all ranks finish their spectral turning.
          CALL MPI_BARRIER(MPI_COM, ierr)
 
@@ -492,6 +502,7 @@ end if
                 INTALLOC(3)=(npseand - npseatr + 1)*NSpc
             ENDIF
             CALL MPI_Bcast(INTALLOC(1), 3, MPI_INTEGER, MM, MPI_COM, ierr)
+!$ACC Update Host(WSpc)
             CALL MPI_Bcast(WSpc(1,1, INTALLOC(1)), INTALLOC(3),   &
        &                   MPI_REAL, MM, MPI_COM, ierr)
             CALL MPI_BARRIER(MPI_COM, ierr)
@@ -499,6 +510,7 @@ end if
 
 !!    End of refraction FLCTH or FLCK block.
        ENDIF 
+!$ACC End data
 
 !!    Update boundary cells after proper rotation if Arctic part is
 !!    included. 

@@ -54,12 +54,12 @@ ls -l
 
 #module load pgi/19.4 openmpi/3.1.3/2019
 export PATH=$PATH:/opt/pgi/linuxpower/2019/cuda/9.2/bin
-nvprof --profile-child-processes mpirun -np 1 ./WRfrctnHyb
+#nvprof --profile-child-processes mpirun -np 1 ./WRfrctnHyb >& kerneltimings.out
 #nvprof --profile-child-processes --metrics dram_read_throughput,dram_write_throughput mpirun -np 1 ./WRfrctnHyb
 #nvprof --profile-child-processes --metrics flop_dp_efficiency mpirun -np 1 ./WRfrctnHyb
 #nvprof --profile-child-processes --metrics achieved_occupancy mpirun -np 1 ./WRfrctnHyb
 
-#mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb 
+PGI_ACC_NOTIFY=1 mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb >& debug.out
 
 #
   CC=$?
@@ -72,6 +72,7 @@ nvprof --profile-child-processes mpirun -np 1 ./WRfrctnHyb
     ls -l *
     mkdir -p $OUTDIR/
     cp -p C*  $OUTDIR/
+    cp -p *.out $OUTDIR/
   fi
 
 #######################################################################

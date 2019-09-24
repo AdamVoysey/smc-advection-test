@@ -192,6 +192,7 @@ t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
 !$ACC Kernels
+!$ACC Loop Independent
       DO ISEA=1, NSEA
 !Li  Transported variable is divided by CG as in WW3 (???)
         CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
@@ -434,7 +435,8 @@ end if
 !/
 !/ ------------------------------------------------------------------- /
 !/
-      SUBROUTINE W3KRTN ( ISEA, MT ) 
+!     SUBROUTINE W3KRTN ( ISEA, MT ) 
+      SUBROUTINE W3KRTN ( MT ) 
 !     SUBROUTINE W3KRTN ( ISEA, FACTH, FACK, CTHG0, CG, WN, DEPTH,    &
 !                         DDDX, DDDY, ALFLMT, CX, CY, DCXDX, DCXDY,   &
 !                         DCYDX, DCYDY, DCDX, DCDY, VA )
@@ -481,7 +483,8 @@ end if
 !/ ------------------------------------------------------------------- /
 !/ Parameter list
 !/
-      INTEGER, INTENT(IN) :: ISEA, MT
+      INTEGER, INTENT(IN) :: MT
+!     INTEGER, INTENT(IN) :: ISEA, MT
 !     REAL, INTENT(IN)    :: FACTH, FACK, CTHG0, CG(0:NK+1),      &
 !                            WN(0:NK+1), DEPTH, DDDX, DDDY,       &
 !                            ALFLMT(NTH), CX, CY, DCXDX, DCXDY,   & 
@@ -491,18 +494,27 @@ end if
 !/ ------------------------------------------------------------------- /
 !/ Local parameters
 !/
-      INTEGER    :: ITH, IK, ISP
+!     INTEGER    :: ITH, IK, ISP
+      INTEGER    :: ITH, IK, ISP, ISEA
       REAL       :: FGC, FKD, FKS, DEPTH30, CFLK(NDir,0:NFrq)
       REAL, Dimension(NFrq):: FRK, FRG
       REAL, Dimension(NDir):: DDNorm, FKC
       REAL, Dimension(NDir, NFrq):: VQ, VCFLT 
       REAL       :: DM(-1:NFrq+1), DB(0:NFrq+1), SIGSNH(0:NFrq+1)
+! !$ACC Routine SEQ
+!$ACC Routine(smckun02) SEQ
+!$ACC Routine(smcgtcrfr) SEQ
 !
+!$ACC Kernels
+!$ACC Loop gang vector independent private(frk, frg, vq, vcflt, dm, db, sigsnh, cflk)
+CelLop:  DO  ISEA=npseatr, npseand
+
 ! 1.  Preparation for point ------------------------------------------ *
 !     Array with partial derivative of sigma versus depth
 !Li   Use of minimum depth 30 m for refraction factor.  JGLi12Feb2014
       DEPTH30=MAX(30.0, HCel(ISea))
 
+!$ACC Loop seq
       DO IK=0, NFrq+1
 !Li   Refraction factor uses minimum depth of 30 m.  JGLi12Feb2014
 !Li   Maximum of phase 50.0 radian is imposed by Arun Chawla.  JGLi16Feb2017
@@ -514,13 +526,13 @@ end if
          VQ = WSpc(:,:,ISEA)
 
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
-      WHERE( .NOT. (VQ .EQ. VQ) )
-         VQ = 0.0
-      ENDWHERE 
+!     WHERE( .NOT. (VQ .EQ. VQ) )
+!        VQ = 0.0
+!     ENDWHERE 
 
 ! 3.  Refraction velocities ------------------------------------------ *
-!
-!
+
+
       IF ( FLCTH ) THEN
 !
 ! 3.a Set slope filter for depth refraction
@@ -528,6 +540,7 @@ end if
 !Li   Lift theta-refraction limit and use new formulation.   25 Nov 2010
           FGC    = DTG*CTHG0S(ISEA)/DThta
 !
+!$ACC Loop seq
           DO IK=1, NFrq
             FRK(IK) = DTG * SIGSNH(IK)
             FRG(IK) = FGC * CGrp(IK,ISEA)
@@ -536,6 +549,7 @@ end if
 !Li   Current induced refraction stored in FKC.    JGLi30Mar2016
 !Li   Put a CTMAX limit on current theta rotation.  JGLi02Mar2017
           IF ( FLCUR ) THEN
+!$ACC Loop seq
              DO ITH=1, NDir
                 FGC = DTG*( DCYDX(ISEA)*ES2(ITH) - DCXDY(ISEA)*EC2(ITH) +  & 
                                   (DCXDX(ISEA) - DCYDY(ISEA))*ESC(ITH) )
@@ -547,8 +561,10 @@ end if
 !
 ! 3.b Depth refraction and great-circle turning.
 !
+!$ACC Loop seq
           DO ITH=1, NDir
              DDNorm(ITH)=ESIN(ITH)*DHDX(ISEA)-ECOS(ITH)*DHDY(ISEA)
+!$ACC Loop seq
              DO IK=1, NFrq
 !Li   Apply depth gradient limited refraction, current and GCT term
                 VCFLT(ITH,IK)=FRG(IK)*ECOS(ITH) + FKC(ITH) +          & 
@@ -558,13 +574,12 @@ end if
           END DO
 
       END IF
-!
-! 4.  Wavenumber shift velocities due to current refraction ---------- *
-!
-      IF ( FLCK ) THEN
-!
-! 4.a Directionally dependent part
-!
+
+!4.  Wavenumber shift velocities due to current refraction ---------- *
+      IF (FLCK) THEN
+!4.a Directionally dependent part
+
+!$ACC Loop seq
           DO ITH=1, NDir
 !Li   Depth induced refraction is suspended as it is absorbed in
 !Li   the fixed frequency bin used for wave spectrum.  JGLi30Mar2016
@@ -573,17 +588,18 @@ end if
                        -(DCXDY(ISEA) + DCYDX(ISEA))*ESC(ITH)
             END DO
 !Li   Reset any NaN values in current 2nd order gradients. JGLi14Nov2017
-          WHERE( .NOT. (FKC .EQ. FKC) )
-            FKC = 0.0
-          ENDWHERE
-!
-! 4.b Band widths
-!
+        WHERE( .NOT. (FKC .EQ. FKC) )
+          FKC = 0.0
+        ENDWHERE
+
+!4.b Band widths
+
 !Li  Cell and side indices for k-dimension are arranged as
-!    Cell:    | -1 | 0 | 1 | 2 | ... | NK | NK+1 | NK+2 |
-!    Side:        -1   0   1   2 ...     NK     NK+1
+!   Cell:    | -1 | 0 | 1 | 2 | ... | NK | NK+1 | NK+2 |
+!   Side:        -1   0   1   2 ...     NK     NK+1
 !Li  DSIP = SIG(K+1) - SIG(K), radian frequency increment
-!
+
+!$ACC Loop seq
           DO IK=0, NFrq
             DB(IK) = DSIP(IK) / CGrp(IK,ISEA)
             DM(IK) = WNmk(IK+1,ISEA) - WNmk(IK,ISEA)
@@ -599,6 +615,7 @@ end if
 !Li   Reset any NaN values in current-bathy gradient. JGLi14Nov2017
           IF ( .NOT. (FKD .EQ. FKD) )  FKD = 0.0
 
+!$ACC Loop seq
           DO IK=0, NFrq
 !Li   For new refraction scheme using Cg.  JGLi3Jun2011
 !           FKS   = - FACK*WN(IK)*SIG(IK)/SNH2K(IK)
@@ -607,6 +624,7 @@ end if
 !Li   Current induced k-shift.   JGLi30Mar2016
             FKS = MAX( 0.0, CGrp(IK,ISEA)*WNmk(IK,ISEA)-0.5*SIG(IK) )*FKD /    &
                      ( DEPTH30*CGrp(IK,ISEA) )
+!$ACC Loop seq
             DO ITH=1, NDir
               CFLK(ITH,IK) = DTG*( FKS + FKC(ITH)*WNmk(IK,ISEA) )
             END DO
@@ -614,7 +632,7 @@ end if
 !!Li   No CFL limiter is required here as it is applied in SMCkUNO2.
 
         END IF
-!
+
 ! 5.  Propagate ------------------------------------------------------ *
 !
       IF ( MOD(MT,2) .EQ. 0 ) THEN
@@ -639,19 +657,25 @@ end if
  
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
       NN = 0
+!$ACC Loop seq
       DO IK=0, NFrq
+!$ACC Loop seq
          DO ITH=1, NDir
            IF( .NOT. (VQ(ITH,IK) .EQ. VQ(ITH,IK)) ) THEN
              NN = NN + 1
              VQ(ITH, IK) = 0.0
            ENDIF
-         ENDDO
-      ENDDO
+         END DO
+      END DO
       IF (NN .GT. 0)  WRITE(6,*) NN, " NaN in KTRN9 at ISEA =", ISEA
 !
 ! 6.  Store reults --------------------------------------------------- *
 !   
         WSpc(:,:,ISEA) = VQ 
+
+!!    End of refraction cell loop.
+      END DO  CelLop
+!$ACC End kernels
 !
       RETURN
 !
@@ -1119,7 +1143,7 @@ end if
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          INTEGER ::  NRefr
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-
+!$ACC Routine SEQ
 !$ !Li   Rotation is done for all frequency bins at each frequency so
 !$ !Li   the frequency loop can be parallelised.  JGLi16Nov2017
 
@@ -1213,7 +1237,7 @@ end if
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          REAL, Dimension(-1:NFrq+2):: SpeRfr, Spectf, SpeFlx
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-
+!$ACC Routine SEQ
 !Li  Cell and side indices for k-dimension are arranged as 
 !    Cell:    | -1 | 0 | 1 | 2 | ... | NK | NK+1 | NK+2 |
 !    Side:        -1   0   1   2 ...     NK     NK+1

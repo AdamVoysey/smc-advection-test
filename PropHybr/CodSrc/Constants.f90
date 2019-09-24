@@ -42,13 +42,18 @@
        REAL, DIMENSION(-9:NCL):: A, C, D, F, AU, AV, DX, DXR, RCELA
        REAL, DIMENSION(-9:NCL):: HCel, DHDX, DHDY, AngCD, ELaCD, CLats, CTHG0S 
        REAL, DIMENSION(-9:NCL):: DW, CX, CY, DCXDX, DCXDY, DCYDX, DCYDY
+!$ACC Declare Create(HCel,CTHG0S,DThta, CX,CY)
        REAL, DIMENSION( NBDY ):: MBGlo, MBArc
        REAL, DIMENSION( NDir ):: Theta, ESIN, ECOS, EC2, ESC, ES2, Spectr, SpeGCT
+!$ACC Declare Create(SpeGCT,Spectr, DCXDX, DCXDY, DCYDX,DCYDY,DHDX,DHDY, ESC, EC2, ES2,ESIN, ECOS)
        REAL, DIMENSION( 0:NFrq+1 )::  SIG, DSIP, SpecPM 
        REAL, DIMENSION( 0:NFrq+1, -9:NCL)::  REFR, CGrp, Wnmk
+!$ACC Declare Create(CGrp, Wnmk, DSIP, SIG)
+
        REAL, DIMENSION(NFC)::   AngU, AngV, CLatF
        REAL, DIMENSION(NDir,NCL)::   DHLMT
        REAL, DIMENSION(NDir,NFrq,NCL):: WSpc
+!$ACC  Declare Create(WSpc, DHLMT)
 
        REAL,    Allocatable, Dimension(:)  ::  REALLOC1
        REAL,    Allocatable, Dimension(:,:)::  REALLOC2, REALandN
@@ -65,6 +70,7 @@
        INTEGER, DIMENSION(0:MRL)::  NRLCel, NRLUFc, NRLVFc
        INTEGER, DIMENSION( NSpc)::  IAPPRO 
        INTEGER:: I,II,IJ,IJK,J,JJ,JK,K,KK,KL,L,LL,LM,LMN,M,MM,MN,N,NN
+!$ACC Declare Create(K,J,L,M,N, NN)
 
 !  MPI related varialbes
        INTEGER:: MPI_COM, ierr, malloc, myrank, nprocs, nthreads,   &
@@ -76,6 +82,7 @@
        LOGICAL:: Arctic = .false., FVERG = .false., FLCUR = .false., &
                   FLCXY = .true.,  FLCTH = .true.,  FLCK = .true.
 
+!$ACC Declare Create(FLCTH, FLCUR, FLCK, FLCXY, FVERG)
        CHARACTER(LEN=9):: FL9NM='Cn10000.d'
 
 !      Date and time for timing of program by calling Date_And_Time
