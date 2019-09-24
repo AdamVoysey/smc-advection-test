@@ -28,7 +28,7 @@
        REAL,PARAMETER:: DTG=900.0, DTR=1.0/DTG, DTCFL=300.0, AKH=6000.0
 
 !  Writeup interval and model run time in hours.
-       INTEGER,PARAMETER:: NHr=INT(3600.0/DTG), NWP=2*NHr, NTS=60*NHr, NDay=1700 
+       INTEGER,PARAMETER:: NHr=INT(3600.0/DTG), NWP=2*NHr, NTS=1*NHr, NDay=1700 
 
 !  Some physical and atmospheric constants
        REAL,PARAMETER:: GRAV=9.806,CPVAP=1004.5,RDRY=287.05, &

@@ -398,9 +398,16 @@
 !!  Parallelised spectral loop for each rank
 ! SpcLop:  DO  NP=npstar, npsend
 !!  Select assigned spectral components for own rank.
+
+!$ACC data copy(clats,WSpc,CGrp), &
+!$ACC  copy(isd), &
+!$ACC  copy(ice), &
+!$ACC  copy(clatf), &
+!$ACC  copy(jsd)
+
   SpcLop:  DO NP=1, NSpc
               IF( IAPPRO(NP) .EQ. myrank+1 ) THEN 
-                  NF=NP/NDir
+                  NF=(NP+NDIR-1)/NDir
                   ND=MOD(NP, NDir) + 1
 !!    Propagation for the given spectral component
                   CALL W3PSMC( ND, NF, NT )           
@@ -410,6 +417,7 @@
 
 !!    End of spectral loops
            ENDDO  SpcLop
+!$ACC End Data
 
 !!    Wait all ranks finish their spatial propagation for 
 !!    all their assigned spectral components.

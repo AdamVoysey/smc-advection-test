@@ -190,13 +190,13 @@
 
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
+!$ACC Kernels
       DO ISEA=1, NSEA
 !Li  Transported variable is divided by CG as in WW3 (???)
-         CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
+        CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
 !Li  Resetting NaNQ VQ to zero if any.   JGLi18Mar2013
-         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
+        IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
-!$OMP END Parallel DO
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
@@ -238,7 +238,8 @@
          DO ISEA=1, NSEA
             UCFL(ISEA) = DTLDX*CXTOT(ISEA)/CLATS(ISEA)
             VCFL(ISEA) = DTLDY*CYTOT(ISEA) 
-         ENDDO 
+         ENDDO
+!$ACC End Kernels 
 !$OMP END Parallel DO
 
 !Li  Initialise boundary cell CQ and Velocity values.
@@ -664,6 +665,8 @@ end if
 !    proportion of flux into the cells.  This length will be removed by the
 !    cell length when the tracer concentration is updated.
 
+!$ACC Kernels 
+!$ACC Loop independent 
       DO i=NUA, NUB
 
 !    Select Upstream, Central and Downstream cells
@@ -730,6 +733,7 @@ end if
 
       END DO
 
+!$ACC END Kernels 
 !$OMP END DO
 
 !$OMP END Parallel 
@@ -772,6 +776,8 @@ end if
 !$ !  ENDIF
 
 !$OMP DO
+!$ACC Kernels
+!$ACC Loop independent
 
       DO j=NVA, NVB
 
@@ -845,6 +851,7 @@ end if
          FY(j)=CNST0*CNST5*CNST8
 
       END DO
+!$ACC END Kernels
 
 !$OMP END DO
 
