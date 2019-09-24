@@ -15,13 +15,13 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
-export RUNDIR="${HOME}/WW3-smc/smc-advection-test/PropHybr"
+export RUNDIR="${HOME}/miniapp_smc/smc-advection-test/PropHybr"
 export CODDIR="${RUNDIR}/CodSrc"
 export OUTDIR="${RUNDIR}/OutDat"
 export SCRDIR="/tmp/${USER}/tsthyb/"
 
 ################# Set mandatory WW3 environment variables #####################
-export OMP_NUM_THREADS=10
+export OMP_NUM_THREADS=1
 export OMP_PROC_BIND=${OMP_PROC_BIND:-"spread"}
 export OMP_PLACES=${OMP_PLACES:-"cores"}
 export OMP_WAIT_POLICY=${OMP_WAIT_POLICY:-"active"}
@@ -47,7 +47,10 @@ ls -l
 
 ################ Run program and save output if any ######################
  echo " *** WRfrctnHyb *** "
-mpiexec -n 4 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
+#PGI_ACC_TIME=1 mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
+#PGI_ACC_DEBUG=1 mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb >& debug.out
+#PGI_COMPARE=rel=8,verboseautocompare mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb >& autocompare.out
+mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
 
 #
   CC=$?

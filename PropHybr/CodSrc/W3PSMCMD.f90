@@ -95,6 +95,8 @@
       REAL                    :: DTLOC, CGCOS, CGSIN, FUTRN, FVTRN,   &
                                  DFRR, DX0I, DY0I, CGD, DSSD,ARCTH,   &
                                  DNND, DCELL, XWIND, TFAC, DSS, DNN
+
+      REAL :: t1,t2,t3,t4
 !/
 !/ Automatic work arrays
 !
@@ -186,6 +188,7 @@
       ULCFLX = 0.
       VLCFLY = 0.
 
+t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
 !$ACC Kernels
@@ -195,6 +198,11 @@
 !Li  Resetting NaNQ VQ to zero if any.   JGLi18Mar2013
         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
+!$OMP END PARALLEL DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 1 Time = ",(t2-t1)
+end if
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
@@ -206,12 +214,17 @@
 !$OMP END Parallel DO
       ELSE
 !Li   No current case use group speed only.
+t1 = MPI_WTIME()
 !$OMP Parallel DO
          DO ISEA=1, NSEA
             CXTOT(ISEA) =  CGCOS * CGrp(IK,ISEA) 
             CYTOT(ISEA) =  CGSIN * CGrp(IK,ISEA)
          END DO
 !$OMP END Parallel DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 2 Time = ",(t2-t1)
+end if
 !Li   End of IF( FLCUR ) block.
       ENDIF
 
@@ -231,6 +244,7 @@
          IF(NPol .GT. 0) CYTOT(NSEA-NPol+1:NSEA) = 0.0
       ENDIF 
 
+t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li     Convert velocity components into CFL factors.
          DO ISEA=1, NSEA
@@ -239,6 +253,11 @@
          ENDDO
 !$ACC End Kernels 
 !$OMP END Parallel DO
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Kernel 3 Time = ",(t2-t1)
+end if
+
 
 !Li  Initialise boundary cell CQ and Velocity values.
            CQ(-9:0)=0.0
@@ -247,6 +266,9 @@
 !
 ! 3.  Loop over frequency-dependent sub-steps -------------------------*
 !
+
+t1 = MPI_WTIME()
+
        DO ITLOC=1, NTLOC
 !
 !     Initialise net flux arrays.
@@ -269,6 +291,7 @@
 !
 ! 3.c    Calculate this level only if size is factor of LMN 
            IF( MOD(LMN, LvR) .EQ. 0 ) THEN
+
 !
 ! 3.d    Select cell and face ranges 
            icl=NRLCel(LL-1)+1
@@ -283,7 +306,13 @@
 !          CALL SMCxUNO3(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
 !          ELSE
 !  Call SMCxUNO2 to calculate finest level (size-1) MFx value
+t3 = MPI_WTIME()
            CALL SMCxUNO2(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
+t4 = MPI_WTIME()
+if (t3-t4>0) THEN
+write (6,*) "Kernel SMCxUNO2 Time = ",(t3-t4)
+end if
+
 !          ENDIF
 
 !  Store fineset level conservative flux in FCNt advective one in AFCN
@@ -308,6 +337,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update in D and advective update in C
 !  The side length in MF value has to be cancelled with cell y-length.
 !  Also divided by another cell x-size as UCFL is in size-1 unit.
@@ -324,7 +354,13 @@
 !          CALL SMCyUNO3(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
 !          ELSE
 !  Call SMCyUNO2 to calculate MFy value
+t3 = MPI_WTIME()
            CALL SMCyUNO2(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
+t4 = MPI_WTIME()
+if (t3-t4>0) THEN
+write (6,*) "Kernel SMCyUNO2 Time = ",(t3-t4)
+end if
+
 !          ENDIF
 !
 !  Store conservative flux in F
@@ -344,6 +380,7 @@
            ENDDO
 
 !$OMP Parallel DO
+
 !  Store conservative update of D in C
 !  The v side length in MF value has to be cancelled with x-size. 
 !  Also divided by cell y-size as VCFL is in size-1 unit.
@@ -365,7 +402,12 @@
 
 !!    End of ITLOC DO
        ENDDO
- 
+
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Inner Time = ",(t2-t1)
+end if
+
 !  Average with 1-2-1 scheme.  JGLi20Aug2015
        IF(FVERG) CALL SMCAverg(CQ)
 
