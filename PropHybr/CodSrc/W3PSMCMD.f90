@@ -197,6 +197,7 @@
 !Li  Resetting NaNQ VQ to zero if any.   JGLi18Mar2013
         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
+!$OMP END PARALLEL DO
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
