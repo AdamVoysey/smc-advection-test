@@ -28,6 +28,8 @@
        REAL:: CNST, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6, CNST8
        REAL (Kind=8) :: TM1, TM2
 
+       REAL :: t1,t2
+
 ! Initialize MPI with threading
        call MPI_INIT_THREAD(required, provided, ierr)
        MPI_COM = MPI_COMM_WORLD
@@ -399,6 +401,8 @@
 ! SpcLop:  DO  NP=npstar, npsend
 !!  Select assigned spectral components for own rank.
 
+t1 = MPI_WTIME()
+
 !$ACC data copy(clats,WSpc,CGrp), &
 !$ACC  copy(isd), &
 !$ACC  copy(ice), &
@@ -418,6 +422,11 @@
 !!    End of spectral loops
            ENDDO  SpcLop
 !$ACC End Data
+
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "Outer Time = ",(t2-t1)
+end if
 
 !!    Wait all ranks finish their spatial propagation for 
 !!    all their assigned spectral components.
