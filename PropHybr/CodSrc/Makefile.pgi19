@@ -5,6 +5,7 @@
 ##
 
 FC = mpif90
+#FCFLAGS = -mp
 #FCFLAGS = -O2 -acc -ta=tesla,cc70,managed -Minfo=acc 
 #FCFLAGS = -O2 -acc -ta=tesla,autocompare,cc70 -Minfo=acc 
 FCFLAGS = -O2 -acc -ta=tesla,cc70 -Minfo=acc 

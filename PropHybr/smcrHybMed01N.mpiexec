@@ -15,7 +15,7 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
-export RUNDIR="${HOME}/miniapp_smc/smc-advection-test/PropHybr"
+export RUNDIR="${HOME}/WW3-smc/smc-advection-test/PropHybr"
 export CODDIR="${RUNDIR}/CodSrc"
 export OUTDIR="${RUNDIR}/OutDat"
 export SCRDIR="/tmp/${USER}/tsthyb/"

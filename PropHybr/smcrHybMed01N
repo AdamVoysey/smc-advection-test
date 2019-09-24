@@ -15,10 +15,10 @@
 #------------------------------------------------------------------------------
 
 ######################### Set up directories ##################################
- RUNDIR='/data/d02/frjl/PropHybr'
- CODDIR='/data/d02/frjl/PropHybr/CodSrc'
- OUTDIR='/data/d02/frjl/PropHybr/OutDat'
- SCRDIR="/scratch/d02/frjl/tsthyb"
+export RUNDIR='/data/d02/frjl/PropHybr'
+export CODDIR='/data/d02/frjl/PropHybr/CodSrc'
+export OUTDIR='/data/d02/frjl/PropHybr/OutDat'
+export SCRDIR="/scratch/d02/frjl/tsthyb"
 
 ################# Set mandatory WW3 environment variables #####################
  export OMP_NUM_THREADS=36
@@ -40,6 +40,7 @@ rm -f $SCRDIR/*
 
 ####### Copy executable and input files to scratch dir #######################
 echo "Copy executables and input files ..."
+cp $RUNDIR/DatGMC/* ./
 cp $CODDIR/WRfrctnHyb            ./
 
 ls -l
@@ -63,6 +64,7 @@ ls -l
 ##  Save output C* files if any.
     echo " Copying WRfrctnHyb output files ..."
     ls -l *
+    mkdir -p $OUTDIR/
     cp -p C*  $OUTDIR/
   fi
 
