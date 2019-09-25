@@ -316,6 +316,9 @@ end if
 
 !          ENDIF
 
+!$ACC KERNELS
+
+!$ACC LOOP INDEPENDENT
 !  Store fineset level conservative flux in FCNt advective one in AFCN
 !! No partial blocking for multi-resolution SMC grid.  JGLi02Feb2012
            DO i=iuf, juf 
@@ -324,21 +327,28 @@ end if
               FUTRN = FUMD(i)*ULCFLX(i) - FUDIFX(i)
 !! Remove boundary cell flux update or L M > 0.  JGLi28Mar2019
            IF( L > 0 ) THEN
+!$ACC ATOMIC UPDATE
 !$OMP ATOMIC 
-              FCNt(L) = FCNt(L) - FUTRN 
+              FCNt(L) = FCNt(L) - FUTRN
+!$ACC END ATOMIC 
+!$ACC ATOMIC UPDATE
 !$OMP ATOMIC 
-              AFCN(L) = AFCN(L) - FUMD(i)*UCFL(L)*FMR + FUDIFX(i)
+              AFCN(L) = AFCN(L) - (FUMD(i)*UCFL(L)*FMR + FUDIFX(i))
+!$ACC END ATOMIC
            ENDIF
            IF( M > 0 ) THEN
+!$ACC ATOMIC UPDATE
 !$OMP ATOMIC 
               FCNt(M) = FCNt(M) + FUTRN 
+!$ACC AtOMIC UPDATE
 !$OMP ATOMIC 
-              AFCN(M) = AFCN(M) + FUMD(i)*UCFL(M)*FMR - FUDIFX(i)
+              AFCN(M) = AFCN(M) + (FUMD(i)*UCFL(M)*FMR - FUDIFX(i))
            ENDIF
            ENDDO
 
 !$OMP Parallel DO
 
+!$ACC LOOP INDEPENDENT
 !  Store conservative update in D and advective update in C
 !  The side length in MF value has to be cancelled with cell y-length.
 !  Also divided by another cell x-size as UCFL is in size-1 unit.
@@ -349,6 +359,9 @@ end if
               AFCN(n)=0.0
            ENDDO
 !$OMP END Parallel DO
+
+!$ACC END KERNELS
+
 !
 !  Use 3rd order UNO3 scheme.  JGLi03Sep2015
 !          IF( FUNO3 ) THEN
