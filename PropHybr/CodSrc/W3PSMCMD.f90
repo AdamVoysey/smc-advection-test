@@ -656,18 +656,18 @@ CelLop:  DO  ISEA=npseatr, npseand
         END IF
  
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
-      NN = 0
-!$ACC Loop seq
-      DO IK=0, NFrq
-!$ACC Loop seq
-         DO ITH=1, NDir
-           IF( .NOT. (VQ(ITH,IK) .EQ. VQ(ITH,IK)) ) THEN
-             NN = NN + 1
-             VQ(ITH, IK) = 0.0
-           ENDIF
-         END DO
-      END DO
-      IF (NN .GT. 0)  WRITE(6,*) NN, " NaN in KTRN9 at ISEA =", ISEA
+!       NN = 0
+! !$ACC Loop seq
+!       DO IK=0, NFrq
+! !$ACC Loop seq
+!          DO ITH=1, NDir
+!            IF( .NOT. (VQ(ITH,IK) .EQ. VQ(ITH,IK)) ) THEN
+!              NN = NN + 1
+!              VQ(ITH, IK) = 0.0
+!            ENDIF
+!          END DO
+!       END DO
+!       IF (NN .GT. 0)  WRITE(6,*) NN, " NaN in KTRN9 at ISEA =", ISEA
 !
 ! 6.  Store reults --------------------------------------------------- *
 !   
@@ -966,8 +966,8 @@ CelLop:  DO  ISEA=npseatr, npseand
            CNST1=FLOAT( ISD(3,i) ) 
 
 !    Face bounding cell lengths and central gradient
-           CNST2=FLOAT( ISD(3,L) ) 
-           CNST3=FLOAT( ISD(3,M) ) 
+           CNST2=FLOAT( ICE(3,L) ) 
+           CNST3=FLOAT( ICE(3,M) ) 
 
            CNST5=CNST1*(CVF(M)-CVF(L))/(CNST2+CNST3)
 
@@ -1011,8 +1011,8 @@ CelLop:  DO  ISEA=npseatr, npseand
            CNST1=Real( JSD(3,j) )
 
 !    Cell y-length of UCD cells
-           CNST2=Real( JSD(4,L) )
-           CNST3=Real( JSD(4,M) )
+           CNST2=Real( ICE(4,L) )
+           CNST3=Real( ICE(4,M) )
 
 !    Side gradients over 2 cell lengths for central cell.
 !    Face size factor is also included for average.
