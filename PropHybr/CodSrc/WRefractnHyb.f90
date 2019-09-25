@@ -440,7 +440,6 @@ end if
               ND=MOD(NP-1, NDir) + 1
 !!    Save propagated spectral component in one array and broadcast to others
 !$ACC data copy(REALandN(:,NN))
-              write(*,*) "NN,ND, NF",nn,nd,nf
               IF( NN .EQ. myrank+1 ) THEN
 !$ACC Kernels
                   REALandN(:,NN)=WSpc(ND, NF, :)
