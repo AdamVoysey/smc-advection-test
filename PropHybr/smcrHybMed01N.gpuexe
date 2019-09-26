@@ -62,6 +62,7 @@ mpiexec -n 1 --map-by socket:PE=${OMP_NUM_THREADS} ./WRfrctnHyb
     echo " Copying WRfrctnHyb output files ..."
     ls -l *
     mkdir -p $OUTDIR/
+    rm -r $OUTDIR/*
     cp -p C*  $OUTDIR/
   fi
 
