@@ -76,6 +76,7 @@
 !
 !/ ------------------------------------------------------------------- /
       USE CONSTANTS
+      USE, intrinsic :: ieee_arithmetic
       IMPLICIT NONE
 !/
 !/ ------------------------------------------------------------------- /
@@ -379,16 +380,21 @@ end if
 !
 !  Store conservative flux in F
 !! No partial blocking for multi-resolution SMC grid.  JGLi02Feb2012
+
+!$ACC KERNELS
+!$ACC LOOP INDEPENDENT
            DO j=ivf, jvf 
               L=JSD(5,j)
               M=JSD(6,j)
               FVTRN = FVMD(j)*VLCFLY(j) - FVDIFY(j)
            IF( L > 0 ) THEN
 !$OMP ATOMIC 
+!$ACC ATOMIC UPDATE
               BCNt(L) = BCNt(L) - FVTRN 
            ENDIF
            IF( M > 0 ) THEN
 !$OMP ATOMIC 
+!$ACC ATOMIC UPDATE
               BCNt(M) = BCNt(M) + FVTRN 
            ENDIF
            ENDDO
@@ -399,11 +405,15 @@ end if
 !  The v side length in MF value has to be cancelled with x-size. 
 !  Also divided by cell y-size as VCFL is in size-1 unit.
 !! One cosine factor is also needed to be divided for SMC grid
+!$ACC LOOP INDEPENDENT
            DO n=icl, jcl
               CQ(n)=CQA(n) + BCNt(n)*RCELA(n)/CLATS(n) 
               BCNt(n)=0.0
            ENDDO
 !$OMP END Parallel DO
+
+!$ACC END KERNELS
+
 !
 !  End of refine level if block  MOD(LMN, LvR) .EQ. 0 
            ENDIF
@@ -428,17 +438,19 @@ end if
 !
 ! 4.  Store results in VQ in proper format --------------------------- *
 !
+!$ACC KERNELS
          NN = 0
       DO ISEA=1, NSEA
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
-         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) ) THEN
-             CQ(ISEA) = 0.0
-             NN = NN + 1
-         ENDIF
+!         IF( .NOT. (ieee_is_nan(CQ(ISEA))) ) THEN
+!             CQ(ISEA) = 0.0
+!             NN = NN + 1
+!         ENDIF
 !!Li  Assign spectral component to full sea point array
          WSpc(ITH, IK, ISEA) = MAX(0.0, CQ(ISEA)*CGrp(IK,ISEA) )
         END DO
         IF( NN > 0 ) WRITE(6,*) NN," NaN found PSMC end at ITH IK NT=", ITH, IK, MT
+!$ACC END KERNELS
 !
       RETURN
 !
