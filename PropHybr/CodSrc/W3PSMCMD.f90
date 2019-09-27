@@ -206,8 +206,6 @@
       VLCFLY = 0.
 
 t1 = MPI_WTIME()
-
-!t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
       cq=0.0
@@ -360,9 +358,12 @@ t1 = MPI_WTIME()
 !$ACC ATOMIC UPDATE
 !$OMP ATOMIC 
               FCNt(M) = FCNt(M) + FUTRN 
+!$acc end atomic
+
 !$ACC AtOMIC UPDATE
 !$OMP ATOMIC 
               AFCN(M) = AFCN(M) + (FUMD(i)*UCFL(M)*FMR - FUDIFX(i))
+!$acc end atomic
            ENDIF
            ENDDO
 
@@ -408,11 +409,13 @@ t1 = MPI_WTIME()
 !$OMP ATOMIC 
 !$ACC ATOMIC UPDATE
               BCNt(L) = BCNt(L) - FVTRN 
+!$acc end atomic
            ENDIF
            IF( M > 0 ) THEN
 !$OMP ATOMIC 
 !$ACC ATOMIC UPDATE
               BCNt(M) = BCNt(M) + FVTRN 
+!$acc end atomic
            ENDIF
            ENDDO
 
@@ -441,7 +444,6 @@ t1 = MPI_WTIME()
 
 !!    End of ITLOC DO
        ENDDO
-!  Average with 1-2-1 scheme.  JGLi20Aug2015
 
 !t2 = MPI_WTIME()
 !if (t2-t1>0) THEN
@@ -553,12 +555,15 @@ end if
       REAL, Dimension(NDir):: DDNorm, FKC
       REAL, Dimension(NDir, NFrq):: VQ, VCFLT 
       REAL       :: DM(-1:NFrq+1), DB(0:NFrq+1), SIGSNH(0:NFrq+1)
-! !$ACC Routine SEQ
-!!$ACC Routine(smckuno2) SEQ
-!!$ACC Routine(smcgtcrfr) SEQ
+
+
+!$ACC Routine(smckunO2) SEQ
+!$ACC Routine(smcgtcrfr) SEQ
 !
-!!$ACC Kernels
-!!$ACC Loop gang vector independent private(frk, frg, vq, vcflt, dm, db, sigsnh, cflk)
+!$acc data present (hcel,Wnmk,WSpc,CTHG0S,CGrp,DCYDX,DCXDY,DCXDX,DCYDY,ESC,EC2,ES2, & 
+!$acc               DHDX,ECOS,DHLMT,dsip,cx,cy,DHDY)
+!$ACC kernels 
+!$ACC Loop gang vector independent private(frk, frg, fkc, vq, vcflt, dm, db, sigsnh, cflk,DDNorm) 
 CelLop:  DO  ISEA=npseatr, npseand
 
 ! 1.  Preparation for point ------------------------------------------ *
@@ -566,7 +571,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Use of minimum depth 30 m for refraction factor.  JGLi12Feb2014
       DEPTH30=MAX(30.0, HCel(ISea))
 
-!!$ACC Loop seq
+!!$acc loop vector
       DO IK=0, NFrq+1
 !Li   Refraction factor uses minimum depth of 30 m.  JGLi12Feb2014
 !Li   Maximum of phase 50.0 radian is imposed by Arun Chawla.  JGLi16Feb2017
@@ -592,7 +597,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Lift theta-refraction limit and use new formulation.   25 Nov 2010
           FGC    = DTG*CTHG0S(ISEA)/DThta
 !
-!!$ACC Loop seq
+!!$ACC Loop vector
           DO IK=1, NFrq
             FRK(IK) = DTG * SIGSNH(IK)
             FRG(IK) = FGC * CGrp(IK,ISEA)
@@ -601,7 +606,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Current induced refraction stored in FKC.    JGLi30Mar2016
 !Li   Put a CTMAX limit on current theta rotation.  JGLi02Mar2017
           IF ( FLCUR ) THEN
-!!$ACC Loop seq
+!!$ACC Loop vector
              DO ITH=1, NDir
                 FGC = DTG*( DCYDX(ISEA)*ES2(ITH) - DCXDY(ISEA)*EC2(ITH) +  & 
                                   (DCXDX(ISEA) - DCYDY(ISEA))*ESC(ITH) )
@@ -613,10 +618,10 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
 ! 3.b Depth refraction and great-circle turning.
 !
-!!$ACC Loop seq
+!!$ACC Loop vector
           DO ITH=1, NDir
              DDNorm(ITH)=ESIN(ITH)*DHDX(ISEA)-ECOS(ITH)*DHDY(ISEA)
-!!$ACC Loop seq
+!$ACC Loop seq
              DO IK=1, NFrq
 !Li   Apply depth gradient limited refraction, current and GCT term
                 VCFLT(ITH,IK)=FRG(IK)*ECOS(ITH) + FKC(ITH) +          & 
@@ -631,7 +636,7 @@ CelLop:  DO  ISEA=npseatr, npseand
       IF (FLCK) THEN
 !4.a Directionally dependent part
 
-!!$ACC Loop seq
+!!$ACC Loop vector
           DO ITH=1, NDir
 !Li   Depth induced refraction is suspended as it is absorbed in
 !Li   the fixed frequency bin used for wave spectrum.  JGLi30Mar2016
@@ -651,7 +656,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !   Side:        -1   0   1   2 ...     NK     NK+1
 !Li  DSIP = SIG(K+1) - SIG(K), radian frequency increment
 
-!!$ACC Loop seq
+!!$ACC Loop vector
           DO IK=0, NFrq
             DB(IK) = DSIP(IK) / CGrp(IK,ISEA)
             DM(IK) = WNmk(IK+1,ISEA) - WNmk(IK,ISEA)
@@ -667,7 +672,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Reset any NaN values in current-bathy gradient. JGLi14Nov2017
           IF ( .NOT. (FKD .EQ. FKD) )  FKD = 0.0
 
-!!$ACC Loop seq
+!!$ACC Loop vector
           DO IK=0, NFrq
 !Li   For new refraction scheme using Cg.  JGLi3Jun2011
 !           FKS   = - FACK*WN(IK)*SIG(IK)/SNH2K(IK)
@@ -676,7 +681,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Current induced k-shift.   JGLi30Mar2016
             FKS = MAX( 0.0, CGrp(IK,ISEA)*WNmk(IK,ISEA)-0.5*SIG(IK) )*FKD /    &
                      ( DEPTH30*CGrp(IK,ISEA) )
-!!$ACC Loop seq
+!!$ACC Loop vector
             DO ITH=1, NDir
               CFLK(ITH,IK) = DTG*( FKS + FKC(ITH)*WNmk(IK,ISEA) )
             END DO
@@ -727,7 +732,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !!    End of refraction cell loop.
       END DO  CelLop
-!!$ACC End kernels
+!$ACC End kernels
+!$acc end data 
 !
       RETURN
 !
@@ -772,8 +778,10 @@ CelLop:  DO  ISEA=npseatr, npseand
 !    proportion of flux into the cells.  This length will be removed by the
 !    cell length when the tracer concentration is updated.
 
-!!$ACC Kernels 
-!!$ACC Loop independent 
+!$acc data present(cf,uc,isd,ice,clats,fu,uflx,fx)
+!$acc kernels
+      fx=0.0
+      fu=0.0
       DO i=NUA, NUB
 
 !    Select Upstream, Central and Downstream cells
@@ -839,8 +847,8 @@ CelLop:  DO  ISEA=npseatr, npseand
          FX(i)=CNST0*CNST5*CNST8*CNST9
 
       END DO
-
-!!$ACC END Kernels 
+!$acc end kernels
+!$acc end data
 !$OMP END DO
 
 !$OMP END Parallel 
@@ -854,7 +862,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 ! Subroutine that calculate mid-flux values for x dimension 
       SUBROUTINE SMCyUNO2(NVA, NVB, CF, VC, VFLY, AKDif, FV, FY, FTS)
 !!Li        CALL SMCyUNO2(ivf, jvf, CQ, VCFL, VLCFLY, DNND, FVMD, FVDIFY, FMR)
-         USE CONSTANTS, ONLY: nc, nv, j, k, jsd, l, m, n, ice, clatf
+         USE CONSTANTS, ONLY: nc, nv, jsd, ice, clatf
          IMPLICIT NONE
 
          INTEGER, INTENT( IN):: NVA, NVB
@@ -862,6 +870,7 @@ CelLop:  DO  ISEA=npseatr, npseand
          REAL,    INTENT(Out):: VFLY(NV), FV(NV), FY(NV)
 !
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6, CNST8
+         Integer :: j,k,l,m,n
 
 !    Notice an extra side length L is multiplied to mid-flux to give correct
 !    proportion of flux into the cells.  This length will be removed by the
@@ -883,9 +892,11 @@ CelLop:  DO  ISEA=npseatr, npseand
 !$ !  ENDIF
 
 !$OMP DO
-!!$ACC Kernels
-!!$ACC Loop independent
 
+!$acc data present(cf,vc,jsd,ice,clatf,fy,fv,vfly)
+!$acc kernels
+      fy=0.0
+      fv=0.0
       DO j=NVA, NVB
 
 !    Select Upstream, Central and Downstream cells
@@ -958,8 +969,8 @@ CelLop:  DO  ISEA=npseatr, npseand
          FY(j)=CNST0*CNST5*CNST8
 
       END DO
-!!$ACC END Kernels
-
+!$acc end kernels
+!$acc end data
 !$OMP END DO
 
 !$OMP END Parallel 
@@ -977,8 +988,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
        SUBROUTINE SMCGradn(CVQ, GrdX, GrdY) 
 
-         USE CONSTANTS, ONLY: nv, nc, dx0, rearth, dy, i, nu, l, &
-                              isd, m, ice, n, clats, j, jsd, npol 
+         USE CONSTANTS, ONLY: nv, nc, dx0, rearth, dy, nu, &
+                              isd, ice, clats, jsd, npol 
          IMPLICIT NONE
 
          REAL,    INTENT( IN)::  CVQ(-9:NC)
@@ -986,6 +997,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6 
          REAL :: DX0I, DY0I
+         integer :: i,j,l,m,n
 
 !    Use a few working arrays
          REAL,  Dimension(-9:NC):: CVF, AUN, AVN  
@@ -1109,11 +1121,161 @@ CelLop:  DO  ISEA=npseatr, npseand
         END SUBROUTINE SMCGradn
 
 !
+!
+! Subroutine that calculate cell centre gradient for any input variable.
+! Nemerical average is applied to size-changing faces and the gradients 
+! are along the lat-lon local east-north directions.    JGLi18Aug2015
+!
+       SUBROUTINE SMCGradn_GPU(CVQ, GrdX, GrdY) 
+
+         USE CONSTANTS
+         IMPLICIT NONE
+
+         REAL,    INTENT( IN)::  CVQ(-9:NC)
+         REAL,    INTENT(Out):: GrdX(NC), GrdY(NC)
+!
+         REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6 
+         REAL :: DX0I, DY0I
+         integer :: i,j,l,m,n
+
+!    Use a few working arrays
+         REAL,  Dimension(-9:NC):: CVF, AUN, AVN  
+
+!$acc data present(cvq,GrdX,GrdY) create(CVF,AUN,AVN)
+!$acc kernels 
+!    Pass a copy to working variable.
+         CVF=CVQ 
+
+!!   Initialize arrays
+         AUN = 0.
+         AVN = 0.
+        GrdX = 0.
+        GrdY = 0.
+
+!!   Multi-resolution base-cell size defined by refined levels.
+!!   So the MRFct converts the base cell SX, SY into size-1 cell lenth.
+!!   Constant size-1 dy=DY0 and dx on Equator DX0, inverted.
+        DX0I   = 1.0/( DX0*REARTH )
+        DY0I   = 1.0/(  DY*REARTH )
+
+!$OMP Parallel Default(Shared), Private(i, j, K, L, M, N),  &
+!$OMP& Private(CNST,CNST0,CNST1,CNST2,CNST3,CNST4,CNST5,CNST6)
+
+!$OMP DO
+
+!!   Calculate x-gradient by averaging U-face gradients. 
+        DO i=1, NU
+
+!    Select Upstream, Central and Downstream cells
+           L=ISD(5,i)
+           M=ISD(6,i)
+!DWN         write(*,*) "W3SMCMD line 964 - L, M",l, m
+!    Multi-resolution SMC grid requires flux multiplied by face factor.
+           CNST1=REAL( ISD(3,i) ) 
+
+!    Face bounding cell lengths and central gradient
+           CNST2=REAL( ICE(3,L) ) 
+           CNST3=REAL( ICE(3,M) ) 
+
+           CNST5=CNST1*(CVF(M)-CVF(L))/(CNST2+CNST3)
+
+!$OMP CRITICAL 
+!    Store side gradient in two neighbouring cells
+!$acc atomic update
+           AUN(L) = AUN(L) + CNST5 
+!$acc end atomic
+!$acc atomic update
+           AUN(M) = AUN(M) + CNST5 
+!$acc end atomic
+!$OMP END CRITICAL 
+
+        END DO
+
+!$OMP END DO
+
+!  Assign averaged side-gradient to GrdX, plus latitude factor
+!  Note averaging over 2 times of cell y-width factor but AUN
+!  has already been divied by two cell lengths. 
+
+!$OMP DO
+
+        DO n=1, NC
+
+!  Cell y-size IJKCel(4,i) is used to cancel the face size-factor in AUN. 
+!  Plus the actual physical length scale for size-1 cell. 
+!  Note polar cell (if any) AUN = 0.0 as it has no U-face.
+           GrdX(n)=DX0I*AUN(n)/( CLats(n)*ICE(4,n) )
+
+        ENDDO
+
+!$OMP END DO
+
+!$OMP DO
+
+!!   Calculate y-gradient by averaging V-face gradients. 
+        DO j=1, NV
+
+!    Select Central and Downstream cells
+           L=JSD(5,j)
+           M=JSD(6,j)
+
+!    Face size is required for multi-resolution grid.
+           CNST1=Real( JSD(3,j) )
+
+!    Cell y-length of UCD cells
+           CNST2=Real( ICE(4,L) )
+           CNST3=Real( ICE(4,M) )
+
+!    Side gradients over 2 cell lengths for central cell.
+!    Face size factor is also included for average.
+!    Side gradients over 2 cell lengths for central cell.
+!    Face size factor is also included for average.
+           CNST6=CNST1*(CVF(M)-CVF(L))/(CNST2+CNST3)
+
+!$OMP CRITICAL 
+!    Store side gradient in two neighbouring cells
+!$acc atomic update
+           AVN(L) = AVN(L) + CNST6 
+!$acc end atomic
+!$acc atomic update
+           AVN(M) = AVN(M) + CNST6 
+!$acc end atomic
+!$OMP END CRITICAL 
+
+        END DO
+
+!$OMP END DO
+
+!$OMP DO
+
+!  Assign averaged side-gradient to GrdY.
+        DO n=1, NC 
+
+!  AV is divided by the cell x-size IJKCel(3,i) to cancel face
+!  size-factor, and physical y-distance of size-1 cell.
+           GrdY(n)=DY0I*AVN(n)/Real( ICE(3,n) )
+
+        END DO
+
+!$OMP END DO
+
+!$OMP END Parallel 
+
+!!Li  Polar cell (if any) y-gradient is set to zero.
+        IF( NPol .GT. 0 )  GrdY(NC-NPol+1:NC) = 0.0
+
+! 999  PRINT*, ' Sub SMCGradn_GPU ended.'
+!$acc end kernels
+!$acc end data
+        RETURN
+        END SUBROUTINE SMCGradn_GPU
+
+!
 ! Subroutine that average sea point values with a 1-2-1 scheme. 
 !
        SUBROUTINE SMCAverg(CVQ) 
 
-         USE CONSTANTS, ONLY: nc,  i, nu, l, isd, m, j, nv, jsd, n, npol, ice
+         USE CONSTANTS, ONLY: nc, nu, isd, nv, jsd, npol, ice
          IMPLICIT NONE
 
          REAL,    INTENT(INOUT)::  CVQ(-9:NC)
@@ -1122,7 +1284,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !    Use a few working arrays
          REAL,  Dimension(-9:NC):: CVF, AUN, AVN  
-
+         Integer :: i,j,k,l,m,n
+!$acc kernels
 !    Pass a copy to working variable. 
          CVF=CVQ 
 
@@ -1141,9 +1304,12 @@ CelLop:  DO  ISEA=npseatr, npseand
            CNST5=Real( ISD(3,i) )*(CVF(M)+CVF(L))
 
 !    Store side gradient in two neighbouring cells
+!$acc atomic update
            AUN(L) = AUN(L) + CNST5 
+!$acc end atomic
+!$acc atomic update
            AUN(M) = AUN(M) + CNST5 
-
+!$acc end atomic
         END DO
 
 !!   Calculate y-gradient by averaging V-face gradients. 
@@ -1157,8 +1323,12 @@ CelLop:  DO  ISEA=npseatr, npseand
            CNST6=Real( JSD(3,j) )*(CVF(M)+CVF(L))
 
 !    Store side gradient in two neighbouring cells
+!$acc atomic update
            AVN(L) = AVN(L) + CNST6 
+!$acc end atomic
+!$acc atomic update
            AVN(M) = AVN(M) + CNST6 
+!$acc end atomic
 
        END DO
 
@@ -1176,7 +1346,7 @@ CelLop:  DO  ISEA=npseatr, npseand
        END DO
 
 ! 999  PRINT*, ' Sub SMCAverg ended.'
-
+!$acc end kernels
       RETURN
       END SUBROUTINE SMCAverg
 
@@ -1191,14 +1361,16 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li
 
        SUBROUTINE SMCGtCrfr(CoRfr, SpeTHK)
-         USE CONSTANTS, ONLY: ndir, nfrq, spegct, spectr, j, k, l, m, n
+         USE CONSTANTS, ONLY: ndir, nfrq
          IMPLICIT NONE
 
          REAL, INTENT(IN)   ::  CoRfr(NDIR, NFrq)
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          INTEGER ::  NRefr
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-!!$ACC Routine SEQ
+         REAL, DIMENSION(NDir) :: Spectr, SpeGCT
+         Integer :: i,j,k,l,m,n
+!$ACC Routine SEQ
 !$ !Li   Rotation is done for all frequency bins at each frequency so
 !$ !Li   the frequency loop can be parallelised.  JGLi16Nov2017
 
@@ -1285,14 +1457,15 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li
 
        SUBROUTINE SMCkUNO2(CoRfr, SpeTHK, DKC, DKS)
-         USE CONSTANTS, ONLY: ndir, nfrq, xfr, n, j, ctmax
+         USE CONSTANTS, ONLY: ndir, nfrq, xfr, ctmax
 
          IMPLICIT NONE
          REAL, INTENT(IN)   ::  CoRfr(NDIR, 0:NFrq), DKC(0:NFrq+1), DKS(-1:NFrq+1)
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          REAL, Dimension(-1:NFrq+2):: SpeRfr, Spectf, SpeFlx
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-!!$ACC Routine SEQ
+         Integer :: j,n
+!$ACC Routine SEQ
 !Li  Cell and side indices for k-dimension are arranged as 
 !    Cell:    | -1 | 0 | 1 | 2 | ... | NK | NK+1 | NK+2 |
 !    Side:        -1   0   1   2 ...     NK     NK+1
@@ -1377,13 +1550,14 @@ CelLop:  DO  ISEA=npseatr, npseand
 ! also assigned here.  DHDX, DHDY are used for refraction at present.
 ! It has to be rotated to map-east system in the Arctic part.
        SUBROUTINE SMCDHXY
-         USE CONSTANTS, ONLY: nc, hcel, dhdx, dhdy, cx, dhlmt, n, &
-                              nglo, angcd, d2rad, l, i, ndir, ecos, &
+         USE CONSTANTS, ONLY: nc, hcel, dhdx, dhdy, cx, dhlmt, &
+                              nglo, angcd, d2rad, ndir, ecos, &
                               esin, refran, pie, dth, arctic
          IMPLICIT NONE
          REAL :: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
          REAL, Dimension(NC) :: GrHx, GrHy
          REAL, Dimension(-9:NC) :: Dpth
+         Integer :: i,j,k,l,n
 
 !!   Assign water depth to Dpth from HCel values.
        Dpth = HCel(-9:NC)
@@ -1449,13 +1623,17 @@ CelLop:  DO  ISEA=npseatr, npseand
 !                 JGLi23Mar2016
 !
        SUBROUTINE SMCDCXY
-         USE CONSTANTS, ONLY: nc, cx, dcxdx,  n, nglo, angcd, d2rad, &
+         USE CONSTANTS, ONLY: nc, cx, dcxdx, nglo, angcd, d2rad, &
                               dcxdy, cy, dcydx, dcydy, arctic
          IMPLICIT NONE
 
          REAL :: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
          REAL, Dimension(NC) :: GrHx, GrHy
          REAL, Dimension(-9:NC) :: CXCY
+         Integer :: j,n
+
+!$acc data present ( cx,cy,DCXDX,DCXDY) create(cxcy,GrHx,GrHy)
+!$acc kernels
 
 !!   Assign current CX speed to CXCY and set negative cells.
        CXCY(-9:0) = 0.0
@@ -1464,10 +1642,11 @@ CelLop:  DO  ISEA=npseatr, npseand
 !!   Initialize gradient arrays
        GrHx = 0.0
        GrHy = 0.0
-
+!$acc end kernels
 !!   Calculate sea point water depth gradient
-       CALL SMCGradn(CXCY, GrHx, GrHy)
+       CALL SMCGradn_GPU(CXCY, GrHx, GrHy)
 
+!$acc kernels
 !!   Apply limiter to CX-gradient and copy to full grid.
        DO n=1,NC
 
@@ -1498,10 +1677,12 @@ CelLop:  DO  ISEA=npseatr, npseand
 !!   ReInitialize gradient arrays
        GrHx = 0.0
        GrHy = 0.0
+!$acc end kernels
 
 !!   Calculate sea point water depth gradient
-       CALL SMCGradn(CXCY, GrHx, GrHy)
+       CALL SMCGradn_GPU(CXCY, GrHx, GrHy)
 
+!$acc kernels
 !!   Apply limiter to CX-gradient and copy to full grid.
        DO n=1,NC
 
@@ -1524,7 +1705,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !!   Store CY gradient in DCYDX, DCYDY
        DCYDX(1:NC) = GrHx
        DCYDY(1:NC) = GrHy
-
+!$acc end kernels
+!$acc end data
 ! 999  PRINT*, ' Sub SMCDCXY ended.'
 
        RETURN

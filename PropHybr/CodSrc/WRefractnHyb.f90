@@ -29,6 +29,9 @@
        REAL (Kind=8) :: TM1, TM2, GTM1, GTM2
 
        REAL :: t1,t2
+       Integer :: i,j,k,l,m,n,ii,kk,mm,nn
+       Integer :: ND, NF, NT
+       REAL, DIMENSION(NDir) :: Spectr
 !  !$ACC Routine(w3krtn) SEQ
 ! Initialize MPI with threading
        call MPI_INIT_THREAD(required, provided, ierr)
@@ -379,6 +382,10 @@
       ALLOCATE( REALandN(NCL, nprocs), REALLOC2(NSpc, nprocs), STAT=malloc )
 
 !     Start of major time step loop
+
+!$ACC data copy(WSpc,CGrp) copyin(isd,ice,clats,clatf,jsd,hcel,Wnmk,CTHG0S,DCYDX, & 
+!$acc         DCXDY,DCXDX,DCYDY,ESC,EC2,ES2, DHDX,ECOS,DHLMT,dsip,cx,cy,DHDY,d)
+
  TSLoop:  DO  NT=NS, NS+NTS
 
 !!  Read current velocity and calculate gradients if available.
@@ -388,8 +395,10 @@
 
 !!  Broadcast current velocity to all ranks.
         IF ( FLCUR .AND. (MOD(NT, NHr) .EQ. 0) ) THEN
+!$acc update host(cx,cy)
        CALL MPI_Bcast(CX(1), NSEA, MPI_REAL, 0, MPI_COM, ierr)
        CALL MPI_Bcast(CY(1), NSEA, MPI_REAL, 0, MPI_COM, ierr)
+!$acc update device(cx,cy)
        CALL MPI_BARRIER(MPI_COM, ierr)
 
            CALL SMCDCXY
@@ -397,7 +406,6 @@
 
 !!    Space propagation for every spectral component.
 
-!$ACC data copy(WSpc,CGrp) copyin(isd,ice,clats,clatf,jsd)
        IF ( FLCXY ) THEN
 
 !!  Parallelised spectral loop for each rank
@@ -506,7 +514,6 @@ end if
 
 !!    End of refraction FLCTH or FLCK block.
        ENDIF 
-!$ACC End data
 
 !!    Update boundary cells after proper rotation if Arctic part is
 !!    included. 
@@ -562,6 +569,7 @@ end if
         IF(nn /= 0) PRINT*,' File FL9NM was not opened! '
         WRITE(UNIT=6,FMT='(2x,"NT= ",i6,3x,A9)') NT+1,FL9NM
 
+!$acc kernels
            ii=0
         DO i=1, NC
            CTT=0.0
@@ -579,7 +587,8 @@ end if
            ENDIF
 
         ENDDO
-
+!$acc end kernels
+!$acc update host(d)
 !    All cells are saved 
         WRITE(UNIT=26, FMT='(2x,2i8)' )  NT+1, NC
         WRITE(UNIT=26, FMT=7113)  (D(n),  n=1, NC)
@@ -593,6 +602,8 @@ end if
 
 !!  End of time step loop
       ENDDO  TSLoop
+
+!$ACC End data
 
        if (myrank .eq. 0) then
        CALL DATE_AND_TIME(CDate, CTime)
@@ -634,6 +645,7 @@ end if
          IMPLICIT NONE
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
          LOGICAL:: WW3DIS = .true. 
+         integer :: k,n
 
 !!   Setup frequency bands.
          CNST5=0.5*(XFR - 1.0/XFR)
@@ -724,6 +736,7 @@ end if
          IMPLICIT NONE
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
          INTEGER:: NTTOT, NTLOC, NTTARG, NTTMAX, NTTSpc(NSpc), ISTEP, ISP 
+         Integer :: i,j,k,ij
 !
 ! 2.c.3 Calculated expected number of prop. calls per processor
 !
@@ -800,7 +813,7 @@ end if
         REAL:: CNST, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6, CNST7
         REAL:: Spec1D(NDIR), Spec2D(NDIR)
         REAL:: Spec1F(NFrq), Spec2F(NFrq)
-
+        integer :: i,j,k,ij,kl,ll,mm
 !!  All velocities are in unit of basic cell length and time step or 
 !!  divided by the grid velocity BX/DT or BY/DT
 
@@ -987,7 +1000,8 @@ end if
         REAL:: CNST, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
         REAL, ALLOCATABLE, DIMENSION(:)::  XLon, WLat, ELon, ELat, AnglD
         REAL ::  DfPolat, DfPolon, Omega, DfSpeed
-
+        Integer :: i,j,l
+ 
 !!    Note only the Arctic part needs the rotation angles.
 !     Work out u-face central position XLon, WLat in standard grid
       CNST1=DLon*0.5
@@ -1263,7 +1277,7 @@ end if
         USE Constants
         IMPLICIT NONE
         REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-
+        Integer :: i,j,k,m,n,ii,ll,mm,nn
 !  Read Global and Arctic part Multiple-Cell info
 
        OPEN(UNIT=8, FILE=TRIM(CelPath)//TRIM(CelFile),  &
@@ -1479,6 +1493,7 @@ end if
 !       CHARACTER(Len=20) :: CurnFile='Curnt100000.dat'
         CHARACTER(Len=20) :: CurnFile='ww3.14071700.cur'
         CHARACTER(Len=30) :: CurnPath='/data/d02/frjl/SMCUK12cur/'
+        Integer :: i,j,nn
 
         NHour=NTM/NHR
         NwDay=NDay+(NHour/24)*100
@@ -1496,7 +1511,7 @@ end if
         ENDIF
           READ (8,*) (CX(I), I=1,NSEA), (CY(J), J=1,NSEA)
         CLOSE(8)
-
+!$acc update device(cx,cy)
  999  PRINT*, ' Sub READCURNT ended for NT =', NTM
 
       RETURN

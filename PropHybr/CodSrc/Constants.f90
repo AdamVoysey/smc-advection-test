@@ -9,13 +9,13 @@
           USE omp_lib
           IMPLICIT NONE
 
-       LOGICAL:: Arctic = .false., FVERG = .false., FLCUR = .false., &
-                  FLCXY = .true.,  FLCTH = .true.,  FLCK = .true.
-
 ! Parameters fixed in the program
        INTEGER,PARAMETER::NCL=30000, NFC=36000, NBDY=100, NPol=0,   &
           &               NLat=6144, NLon=8192, MNDPTH=5, MRL=4,    &
           &               NDir=36,   NFrq=30,   NSpc=NDir*NFrq  
+
+       LOGICAL:: Arctic = .false., FVERG = .false., FLCUR = .false., &
+                  FLCXY = .true.,  FLCTH = .true.,  FLCK = .true.
 
        REAL,PARAMETER:: XFR=1.1, Frqc0=0.04118, CTMAX=0.7, DTME=3600.0, &
       &                 CLARMN=85.0, DMIN=10.0, Refran=36.0    
@@ -43,10 +43,10 @@
        REAL::  AMG, CMX, CTT, UMX, DY, DYR, DX0, DTH, DThta, SWH0, Alpha
        REAL::  AKHDT2, CGCMX, CRFMX, PkFrq
        REAL, DIMENSION(-9:NCL):: A, C, D, F, AU, AV, DX, DXR, RCELA
-       REAL, DIMENSION(-9:NCL):: HCel, DHDX, DHDY, AngCD, ELaCD, CLats, CTHG0S 
+       REAL, DIMENSION(-9:NCL):: HCel, DHDX, DHDY, AngCD, ELaCD, CLats, CTHG0S
        REAL, DIMENSION(-9:NCL):: DW, CX, CY, DCXDX, DCXDY, DCYDX, DCYDY
        REAL, DIMENSION( NBDY ):: MBGlo, MBArc
-       REAL, DIMENSION( NDir ):: Theta, ESIN, ECOS, EC2, ESC, ES2, Spectr, SpeGCT
+       REAL, DIMENSION( NDir ):: Theta, ESIN, ECOS, EC2, ESC, ES2
        REAL, DIMENSION( 0:NFrq+1 )::  SIG, DSIP, SpecPM 
        REAL, DIMENSION( 0:NFrq+1, -9:NCL)::  REFR, CGrp, Wnmk
 
@@ -59,8 +59,8 @@
        INTEGER, Allocatable, Dimension(:)  ::  INTALLOC
        INTEGER, Allocatable, Dimension(:,:)::  INTALLO2
 
-       INTEGER:: icl, jcl, iuf, juf, ivf, jvf, LvR, Lvm 
-       INTEGER:: NS, NT, ND, NE, NF, NA, NB, NP, NR, MRFct 
+       INTEGER:: Lvm 
+       INTEGER:: NS, NE, NA, NB, NP, NR, MRFct 
        INTEGER:: NC, NU, NV, NGLo, NGLA, NGLB, NArc, NArA, NArB,    &
       &          NUGL, NUAr, NVGL, NVAr, NNor, NSou
        INTEGER, DIMENSION(5,-9:NCL)::  ICE
@@ -68,7 +68,6 @@
        INTEGER, DIMENSION(8,NFC)::  JSD
        INTEGER, DIMENSION(0:MRL)::  NRLCel, NRLUFc, NRLVFc
        INTEGER, DIMENSION( NSpc)::  IAPPRO 
-       INTEGER:: I,II,IJ,IJK,J,JJ,JK,K,KK,KL,L,LL,LM,LMN,M,MM,MN,N,NN
 
 !  MPI related varialbes
        INTEGER:: MPI_COM, ierr, malloc, myrank, nprocs, nthreads,   &
