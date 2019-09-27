@@ -396,12 +396,8 @@
         ENDIF
 
 !!    Space propagation for every spectral component.
-!$ACC data copy(clats,WSpc,CGrp), &
-!$ACC  copy(isd), &
-!$ACC  copy(ice), &
-!$ACC  copy(clatf), &
-!$ACC  copy(jsd)
 
+!$ACC data copy(WSpc,CGrp) copyin(isd,ice,clats,clatf,jsd)
        IF ( FLCXY ) THEN
 
 !!  Parallelised spectral loop for each rank
@@ -423,11 +419,12 @@ t1 = MPI_WTIME()
 !!    End of spectral loops
            ENDDO  SpcLop
 
-
 t2 = MPI_WTIME()
 if (t2-t1>0) THEN
 write (6,*) "Outer Time = ",(t2-t1)
 end if
+
+!!$acc end data
 
 !!    Wait all ranks finish their spatial propagation for 
 !!    all their assigned spectral components.
@@ -439,27 +436,26 @@ end if
               NF=(NP+NDIR-1)/NDir
               ND=MOD(NP-1, NDir) + 1
 !!    Save propagated spectral component in one array and broadcast to others
-!$ACC data copy(REALandN(:,NN))
               IF( NN .EQ. myrank+1 ) THEN
+!$ACC data copyout(REALandN(:,NN))
 !$ACC Kernels
                   REALandN(:,NN)=WSpc(ND, NF, :)
 !$ACC End kernels
-              ENDIF
 !$ACC End data
+              ENDIF
 
 !!    Wait the specific rank to finish its propagation results assignment.
               CALL MPI_BARRIER(MPI_COM, ierr)
 
 !!   Broadcast to all other ranks from each rank.
               CALL MPI_Bcast(REALandN(1, NN), NCL , MPI_REAL, NN-1, MPI_COM, ierr)
+              IF( myrank + 1 .NE. NN ) THEN
 !$ACC data copyin(REALandN(:,NN))
 !$ACC Kernels
-              IF( myrank + 1 .NE. NN ) THEN
                 WSpc( ND, NF, : ) = REALandN(:, NN) 
-              ENDIF
 !$ACC End kernels
 !$ACC End data
-
+              ENDIF
 !!    Wait all ranks finish their propagation results storage.
               CALL MPI_BARRIER(MPI_COM, ierr)
 
@@ -504,6 +500,7 @@ end if
 !$ACC Update Host(WSpc)
             CALL MPI_Bcast(WSpc(1,1, INTALLOC(1)), INTALLOC(3),   &
        &                   MPI_REAL, MM, MPI_COM, ierr)
+!$acc update device(WSpc)
             CALL MPI_BARRIER(MPI_COM, ierr)
          ENDDO
 

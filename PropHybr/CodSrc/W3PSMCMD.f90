@@ -75,7 +75,12 @@
 !     UNO2 advection scheme and isotropic FTCS diffusion scheme. 
 !
 !/ ------------------------------------------------------------------- /
-      USE CONSTANTS
+      USE CONSTANTS, ONLY: ncl, nfc, cx, cy, rcela, cgrp, angcd, clats, &
+                           isd, jsd, wspc, grav, sig, ecos, esin, flcur, &
+                           nc, sx, d2rad, rearth, sy, dtcfl, dtg, dtme, &
+                           xfr, dthta, nsea, arctic, nglo, npol, mrfct, &
+                           mrl, nrlcel, nrlufc, nrlvfc, fverg  
+      USE mpi 
       USE, intrinsic :: ieee_arithmetic
       IMPLICIT NONE
 !/
@@ -108,6 +113,9 @@
 
       LOGICAL ::  YFIRST
 
+      Integer :: i,j,l,m,n,kk,ll,nn,lmn
+      Integer :: icl,jcl,ivf,jvf,iuf,juf
+      Integer :: LvR
 ! 1.  Preparations --------------------------------------------------- *
 
 !!Li  Maximum group speed for 1st and the transported frequency bin
@@ -186,14 +194,24 @@
 !
 !/T      WRITE (NDST,9010)
 !
+
+!$acc data create(cxtot,cytot,FCNt,AFCN,BCNt,UCFL,VCFL,CQA, CXTOT, CYTOT,FUMD, FUDIFX, ULCFLX,FVMD, FVDIFY, VLCFLY)
+
+!$acc data copyin(rcela,cgrp,cx,cy,angcd,dssd,dnnd,clats,isd,jsd) copy(wspc) copyout(cq) 
+!$acc kernels 
+
+      vcfl=0.0;ucfl=0.0
+      cxtot=0.0;cytot=0.0
       ULCFLX = 0.
       VLCFLY = 0.
 
 t1 = MPI_WTIME()
+
+!t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li    Pass spectral element to CQ and filter out NaN value if any.
-!$ACC Kernels
-!$ACC Loop Independent
+      cq=0.0
+
       DO ISEA=1, NSEA
 !Li  Transported variable is divided by CG as in WW3 (???)
         CQ(ISEA) = WSpc(ITH, IK, ISEA)/CGrp(IK,ISEA)
@@ -201,10 +219,10 @@ t1 = MPI_WTIME()
         IF( .NOT. (CQ(ISEA) .EQ. CQ(ISEA)) )  CQ(ISEA) = 0.0
       END DO
 !$OMP END PARALLEL DO
-t2 = MPI_WTIME()
-if (t2-t1>0) THEN
-write (6,*) "Kernel 1 Time = ",(t2-t1)
-end if
+!t2 = MPI_WTIME()
+!if (t2-t1>0) THEN
+!write (6,*) "Kernel 1 Time = ",(t2-t1)
+!end if
 
 !Li  Add current components if any to wave velocity.
       IF ( FLCUR ) THEN
@@ -212,21 +230,21 @@ end if
          DO ISEA=1, NSEA
             CXTOT(ISEA) = (CGCOS * CGrp(IK,ISEA) + CX(ISEA))
             CYTOT(ISEA) = (CGSIN * CGrp(IK,ISEA) + CY(ISEA))
-         ENDDO 
+         ENDDO
 !$OMP END Parallel DO
       ELSE
 !Li   No current case use group speed only.
-t1 = MPI_WTIME()
+!t1 = MPI_WTIME()
 !$OMP Parallel DO
          DO ISEA=1, NSEA
             CXTOT(ISEA) =  CGCOS * CGrp(IK,ISEA) 
             CYTOT(ISEA) =  CGSIN * CGrp(IK,ISEA)
          END DO
 !$OMP END Parallel DO
-t2 = MPI_WTIME()
-if (t2-t1>0) THEN
-write (6,*) "Kernel 2 Time = ",(t2-t1)
-end if
+!t2 = MPI_WTIME()
+!if (t2-t1>0) THEN
+!write (6,*) "Kernel 2 Time = ",(t2-t1)
+!end if
 !Li   End of IF( FLCUR ) block.
       ENDIF
 
@@ -242,41 +260,43 @@ end if
          END DO
 
 !Li   V-component is reset to zero for Polar cell as direction
-!Li   is undefined there.  
+!Li   is undefined there. 
          IF(NPol .GT. 0) CYTOT(NSEA-NPol+1:NSEA) = 0.0
       ENDIF 
 
-t1 = MPI_WTIME()
+!t1 = MPI_WTIME()
 !$OMP Parallel DO
 !Li     Convert velocity components into CFL factors.
          DO ISEA=1, NSEA
             UCFL(ISEA) = DTLDX*CXTOT(ISEA)/CLATS(ISEA)
             VCFL(ISEA) = DTLDY*CYTOT(ISEA) 
          ENDDO
-!$ACC End Kernels 
 !$OMP END Parallel DO
-t2 = MPI_WTIME()
-if (t2-t1>0) THEN
-write (6,*) "Kernel 3 Time = ",(t2-t1)
-end if
+!t2 = MPI_WTIME()
+!if (t2-t1>0) THEN
+!write (6,*) "Kernel 3 Time = ",(t2-t1)
+!end if
 
 
 !Li  Initialise boundary cell CQ and Velocity values.
            CQ(-9:0)=0.0
          UCFL(-9:0)=0.0
          VCFL(-9:0)=0.0
-!
+!$acc end kernels
+
 ! 3.  Loop over frequency-dependent sub-steps -------------------------*
 !
 
-t1 = MPI_WTIME()
+!t1 = MPI_WTIME()
 
        DO ITLOC=1, NTLOC
 !
 !     Initialise net flux arrays.
+!$acc kernels
           FCNt(-9:NCL) = 0.0
           AFCN(-9:NCL) = 0.0
           BCNt(-9:NCL) = 0.0
+!$acc end kernels
 !
 !     Multi-resolution SMC grid uses irregular grid advection scheme
 !     without partial blocking when MRL > 1
@@ -289,7 +309,7 @@ t1 = MPI_WTIME()
 
 !        Cell size of this level
               LvR=2**(LL - 1)
-              FMR=FLOAT( LvR )
+              FMR=real( LvR )
 !
 ! 3.c    Calculate this level only if size is factor of LMN 
            IF( MOD(LMN, LvR) .EQ. 0 ) THEN
@@ -308,20 +328,19 @@ t1 = MPI_WTIME()
 !          CALL SMCxUNO3(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
 !          ELSE
 !  Call SMCxUNO2 to calculate finest level (size-1) MFx value
-t3 = MPI_WTIME()
+!t3 = MPI_WTIME()
            CALL SMCxUNO2(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
-t4 = MPI_WTIME()
-if (t3-t4>0) THEN
-write (6,*) "Kernel SMCxUNO2 Time = ",(t3-t4)
-end if
+!t4 = MPI_WTIME()
+!if (t3-t4>0) THEN
+!write (6,*) "Kernel SMCxUNO2 Time = ",(t3-t4)
+!end if
 
 !          ENDIF
 
-!$ACC KERNELS
-
-!$ACC LOOP INDEPENDENT
 !  Store fineset level conservative flux in FCNt advective one in AFCN
 !! No partial blocking for multi-resolution SMC grid.  JGLi02Feb2012
+
+!$acc kernels
            DO i=iuf, juf 
               L=ISD(5,i)
               M=ISD(6,i)
@@ -349,7 +368,6 @@ end if
 
 !$OMP Parallel DO
 
-!$ACC LOOP INDEPENDENT
 !  Store conservative update in D and advective update in C
 !  The side length in MF value has to be cancelled with cell y-length.
 !  Also divided by another cell x-size as UCFL is in size-1 unit.
@@ -359,30 +377,29 @@ end if
               FCNt(n)=0.0
               AFCN(n)=0.0
            ENDDO
+!$acc end kernels
+
 !$OMP END Parallel DO
-
-!$ACC END KERNELS
-
 !
 !  Use 3rd order UNO3 scheme.  JGLi03Sep2015
 !          IF( FUNO3 ) THEN
 !          CALL SMCyUNO3(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
 !          ELSE
 !  Call SMCyUNO2 to calculate MFy value
-t3 = MPI_WTIME()
+!t3 = MPI_WTIME()
            CALL SMCyUNO2(ivf, jvf, CQ, VCFL, VLCFLY, DSSD, FVMD, FVDIFY, FMR)
-t4 = MPI_WTIME()
-if (t3-t4>0) THEN
-write (6,*) "Kernel SMCyUNO2 Time = ",(t3-t4)
-end if
+!t4 = MPI_WTIME()
+!if (t3-t4>0) THEN
+!write (6,*) "Kernel SMCyUNO2 Time = ",(t3-t4)
+!end if
 
 !          ENDIF
 !
 !  Store conservative flux in F
 !! No partial blocking for multi-resolution SMC grid.  JGLi02Feb2012
 
-!$ACC KERNELS
-!$ACC LOOP INDEPENDENT
+
+!$acc kernels
            DO j=ivf, jvf 
               L=JSD(5,j)
               M=JSD(6,j)
@@ -400,19 +417,17 @@ end if
            ENDDO
 
 !$OMP Parallel DO
-
 !  Store conservative update of D in C
 !  The v side length in MF value has to be cancelled with x-size. 
 !  Also divided by cell y-size as VCFL is in size-1 unit.
 !! One cosine factor is also needed to be divided for SMC grid
-!$ACC LOOP INDEPENDENT
            DO n=icl, jcl
               CQ(n)=CQA(n) + BCNt(n)*RCELA(n)/CLATS(n) 
               BCNt(n)=0.0
            ENDDO
 !$OMP END Parallel DO
 
-!$ACC END KERNELS
+!$acc end kernels
 
 !
 !  End of refine level if block  MOD(LMN, LvR) .EQ. 0 
@@ -426,19 +441,20 @@ end if
 
 !!    End of ITLOC DO
        ENDDO
+!  Average with 1-2-1 scheme.  JGLi20Aug2015
 
-t2 = MPI_WTIME()
-if (t2-t1>0) THEN
-write (6,*) "Inner Time = ",(t2-t1)
-end if
+!t2 = MPI_WTIME()
+!if (t2-t1>0) THEN
+!write (6,*) "Inner Time = ",(t2-t1)
+!end if
 
 !  Average with 1-2-1 scheme.  JGLi20Aug2015
        IF(FVERG) CALL SMCAverg(CQ)
 
+!$acc kernels
 !
 ! 4.  Store results in VQ in proper format --------------------------- *
 !
-!$ACC KERNELS
          NN = 0
       DO ISEA=1, NSEA
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
@@ -450,8 +466,15 @@ end if
          WSpc(ITH, IK, ISEA) = MAX(0.0, CQ(ISEA)*CGrp(IK,ISEA) )
         END DO
         IF( NN > 0 ) WRITE(6,*) NN," NaN found PSMC end at ITH IK NT=", ITH, IK, MT
-!$ACC END KERNELS
+!$ACC End Kernels 
+!$acc end data
+!$acc end data
 !
+t2 = MPI_WTIME()
+if (t2-t1>0) THEN
+write (6,*) "CALLX Time = ",(t2-t1)
+end if
+
       RETURN
 !
 !/ End of W3PSMC ----------------------------------------------------- /
@@ -502,7 +525,11 @@ end if
 !       SMCkUNO2  Refraction shift in k-space by UNO2.
 !
 !/ ------------------------------------------------------------------- /
-      USE CONSTANTS
+      USE CONSTANTS, ONLY: ndir, nfrq, wspc, npseatr, npseand, hcel,  &
+                           sig,  wnmk, flcth, dtg, cthg0s, dthta, cgrp, &
+                           flcur, dcydx, es2, dcxdy, ec2, dcxdx, dcydy, &
+                           esc, ctmax, esin, dhdx, ecos, dhdy, dhlmt, &
+                           flck, dsip, cx, cy
       IMPLICIT NONE
 !/
 !/ ------------------------------------------------------------------- /
@@ -527,11 +554,11 @@ end if
       REAL, Dimension(NDir, NFrq):: VQ, VCFLT 
       REAL       :: DM(-1:NFrq+1), DB(0:NFrq+1), SIGSNH(0:NFrq+1)
 ! !$ACC Routine SEQ
-!$ACC Routine(smckun02) SEQ
-!$ACC Routine(smcgtcrfr) SEQ
+!!$ACC Routine(smckuno2) SEQ
+!!$ACC Routine(smcgtcrfr) SEQ
 !
-!$ACC Kernels
-!$ACC Loop gang vector independent private(frk, frg, vq, vcflt, dm, db, sigsnh, cflk)
+!!$ACC Kernels
+!!$ACC Loop gang vector independent private(frk, frg, vq, vcflt, dm, db, sigsnh, cflk)
 CelLop:  DO  ISEA=npseatr, npseand
 
 ! 1.  Preparation for point ------------------------------------------ *
@@ -539,7 +566,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Use of minimum depth 30 m for refraction factor.  JGLi12Feb2014
       DEPTH30=MAX(30.0, HCel(ISea))
 
-!$ACC Loop seq
+!!$ACC Loop seq
       DO IK=0, NFrq+1
 !Li   Refraction factor uses minimum depth of 30 m.  JGLi12Feb2014
 !Li   Maximum of phase 50.0 radian is imposed by Arun Chawla.  JGLi16Feb2017
@@ -548,7 +575,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
 ! 2.  Extract spectrum without mapping
 !
-         VQ = WSpc(:,:,ISEA)
+         VQ (:,:)= WSpc(:,:,ISEA)
 
 !Li  Resetting NaNQ VQ to zero if any.   JGLi14Nov2017
 !     WHERE( .NOT. (VQ .EQ. VQ) )
@@ -565,7 +592,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Lift theta-refraction limit and use new formulation.   25 Nov 2010
           FGC    = DTG*CTHG0S(ISEA)/DThta
 !
-!$ACC Loop seq
+!!$ACC Loop seq
           DO IK=1, NFrq
             FRK(IK) = DTG * SIGSNH(IK)
             FRG(IK) = FGC * CGrp(IK,ISEA)
@@ -574,7 +601,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Current induced refraction stored in FKC.    JGLi30Mar2016
 !Li   Put a CTMAX limit on current theta rotation.  JGLi02Mar2017
           IF ( FLCUR ) THEN
-!$ACC Loop seq
+!!$ACC Loop seq
              DO ITH=1, NDir
                 FGC = DTG*( DCYDX(ISEA)*ES2(ITH) - DCXDY(ISEA)*EC2(ITH) +  & 
                                   (DCXDX(ISEA) - DCYDY(ISEA))*ESC(ITH) )
@@ -586,10 +613,10 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
 ! 3.b Depth refraction and great-circle turning.
 !
-!$ACC Loop seq
+!!$ACC Loop seq
           DO ITH=1, NDir
              DDNorm(ITH)=ESIN(ITH)*DHDX(ISEA)-ECOS(ITH)*DHDY(ISEA)
-!$ACC Loop seq
+!!$ACC Loop seq
              DO IK=1, NFrq
 !Li   Apply depth gradient limited refraction, current and GCT term
                 VCFLT(ITH,IK)=FRG(IK)*ECOS(ITH) + FKC(ITH) +          & 
@@ -604,7 +631,7 @@ CelLop:  DO  ISEA=npseatr, npseand
       IF (FLCK) THEN
 !4.a Directionally dependent part
 
-!$ACC Loop seq
+!!$ACC Loop seq
           DO ITH=1, NDir
 !Li   Depth induced refraction is suspended as it is absorbed in
 !Li   the fixed frequency bin used for wave spectrum.  JGLi30Mar2016
@@ -624,7 +651,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !   Side:        -1   0   1   2 ...     NK     NK+1
 !Li  DSIP = SIG(K+1) - SIG(K), radian frequency increment
 
-!$ACC Loop seq
+!!$ACC Loop seq
           DO IK=0, NFrq
             DB(IK) = DSIP(IK) / CGrp(IK,ISEA)
             DM(IK) = WNmk(IK+1,ISEA) - WNmk(IK,ISEA)
@@ -640,7 +667,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Reset any NaN values in current-bathy gradient. JGLi14Nov2017
           IF ( .NOT. (FKD .EQ. FKD) )  FKD = 0.0
 
-!$ACC Loop seq
+!!$ACC Loop seq
           DO IK=0, NFrq
 !Li   For new refraction scheme using Cg.  JGLi3Jun2011
 !           FKS   = - FACK*WN(IK)*SIG(IK)/SNH2K(IK)
@@ -649,7 +676,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li   Current induced k-shift.   JGLi30Mar2016
             FKS = MAX( 0.0, CGrp(IK,ISEA)*WNmk(IK,ISEA)-0.5*SIG(IK) )*FKD /    &
                      ( DEPTH30*CGrp(IK,ISEA) )
-!$ACC Loop seq
+!!$ACC Loop seq
             DO ITH=1, NDir
               CFLK(ITH,IK) = DTG*( FKS + FKC(ITH)*WNmk(IK,ISEA) )
             END DO
@@ -700,7 +727,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !!    End of refraction cell loop.
       END DO  CelLop
-!$ACC End kernels
+!!$ACC End kernels
 !
       RETURN
 !
@@ -712,7 +739,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 ! Subroutine that calculate mid-flux values for x dimension 
        SUBROUTINE SMCxUNO2(NUA, NUB, CF, UC, UFLX, AKDif, FU, FX, FTS)
 !!Li         CALL SMCxUNO2(iuf, juf, CQ, UCFL, ULCFLX, DNND, FUMD, FUDIFX, FMR)
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nc, nu, wspc, isd, ice, clats 
          IMPLICIT NONE
 
          INTEGER, INTENT( IN):: NUA, NUB
@@ -720,6 +747,8 @@ CelLop:  DO  ISEA=npseatr, npseand
          REAL,    INTENT(Out):: UFLX(NU), FU(NU), FX(NU)
 !
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6, CNST8, CNST9
+
+         Integer :: i,k,l,m,n,ij,lj
 
 !    Two layer of boundary cells are added to each boundary cell face
 !    with all boundary cell values CF(-9:0)=0.0.
@@ -743,8 +772,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !    proportion of flux into the cells.  This length will be removed by the
 !    cell length when the tracer concentration is updated.
 
-!$ACC Kernels 
-!$ACC Loop independent 
+!!$ACC Kernels 
+!!$ACC Loop independent 
       DO i=NUA, NUB
 
 !    Select Upstream, Central and Downstream cells
@@ -754,8 +783,8 @@ CelLop:  DO  ISEA=npseatr, npseand
            N=ISD(7,i)
 
 !    Face bounding cell lengths and central gradient
-           CNST2=FLOAT( ICE(3,L) )
-           CNST3=FLOAT( ICE(3,M) )
+           CNST2=real( ICE(3,L) )
+           CNST3=real( ICE(3,M) )
            CNST5=(CF(M)-CF(L))/( CNST2 + CNST3 )
 
 !    Courant number in local size-1 cell, arithmetic average.
@@ -763,7 +792,7 @@ CelLop:  DO  ISEA=npseatr, npseand
            UFLX(i) = CNST6
 
 !    Multi-resolution SMC grid requires flux multiplied by face factor.
-           CNST8 = FLOAT( ISD(3,i) )
+           CNST8 = real( ISD(3,i) )
 
 !    Diffusion factor in local size-1 cell, plus the cosine factors.
 !    2.0 factor to cancel that in gradient CNST5.  JGLi08Mar2012
@@ -779,7 +808,7 @@ CelLop:  DO  ISEA=npseatr, npseand
            IF( M .LE. 0) UFLX(i) = UC(L)*FTS
 
 !    Upstream cell length and gradient, depending on UFLX sign.
-           CNST1=FLOAT( ICE(3,K) )
+           CNST1=real( ICE(3,K) )
            CNST4=(CF(L)-CF(K))/( CNST2 + CNST1 )
 
 !    Use minimum gradient all region.
@@ -795,7 +824,7 @@ CelLop:  DO  ISEA=npseatr, npseand
            IF( L .LE. 0) UFLX(i) = UC(M)*FTS
 
 !    Upstream cell length and gradient, depending on UFLX sign.
-           CNST1=FLOAT( ICE(3,N) )
+           CNST1=real( ICE(3,N) )
            CNST4=(CF(N)-CF(M))/( CNST1 + CNST3 )
 
 !    Use minimum gradient outside monotonic region. 
@@ -811,7 +840,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 
       END DO
 
-!$ACC END Kernels 
+!!$ACC END Kernels 
 !$OMP END DO
 
 !$OMP END Parallel 
@@ -825,7 +854,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 ! Subroutine that calculate mid-flux values for x dimension 
       SUBROUTINE SMCyUNO2(NVA, NVB, CF, VC, VFLY, AKDif, FV, FY, FTS)
 !!Li        CALL SMCyUNO2(ivf, jvf, CQ, VCFL, VLCFLY, DNND, FVMD, FVDIFY, FMR)
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nc, nv, j, k, jsd, l, m, n, ice, clatf
          IMPLICIT NONE
 
          INTEGER, INTENT( IN):: NVA, NVB
@@ -854,8 +883,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !$ !  ENDIF
 
 !$OMP DO
-!$ACC Kernels
-!$ACC Loop independent
+!!$ACC Kernels
+!!$ACC Loop independent
 
       DO j=NVA, NVB
 
@@ -866,8 +895,8 @@ CelLop:  DO  ISEA=npseatr, npseand
            N=JSD(7,j)
 
 !    Face bounding cell lengths and gradient
-           CNST2=FLOAT( ICE(4,L) )
-           CNST3=FLOAT( ICE(4,M) )
+           CNST2=REAL( ICE(4,L) )
+           CNST3=REAL( ICE(4,M) )
            CNST5=(CF(M)-CF(L))/( CNST2 + CNST3 )
 
 !    Courant number in local size-1 cell unit 
@@ -877,7 +906,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !    Face size integer and cosine factor.  
 !    CLATF is defined on V-face for SMC grid.  JGLi28Feb2012
-         CNST8=CLATF(j)*FLOAT( JSD(3,j) )
+         CNST8=CLATF(j)*REAL( JSD(3,j) )
 
 !    For positive velocity case
          IF(CNST6 >= 0.0)  THEN
@@ -892,7 +921,7 @@ CelLop:  DO  ISEA=npseatr, npseand
            ENDIF
 
 !    Upstream cell size and irregular grid gradient, depending on VFLY.
-           CNST1=FLOAT( ICE(4,K) )
+           CNST1=REAL( ICE(4,K) )
            CNST4=(CF(L)-CF(K))/( CNST2 + CNST1 )
 
 !    Use minimum gradient outside monotonic region
@@ -913,7 +942,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !    Upstream cell size and gradient, depending on VFLY sign.
 !    Side gradients for central cell includs 0.5 factor.
-           CNST1=FLOAT( ICE(4,N) )
+           CNST1=REAL( ICE(4,N) )
            CNST4=(CF(N)-CF(M))/( CNST1 + CNST3 )
 
 !    Use minimum gradient outside monotonic region
@@ -929,7 +958,7 @@ CelLop:  DO  ISEA=npseatr, npseand
          FY(j)=CNST0*CNST5*CNST8
 
       END DO
-!$ACC END Kernels
+!!$ACC END Kernels
 
 !$OMP END DO
 
@@ -948,7 +977,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
        SUBROUTINE SMCGradn(CVQ, GrdX, GrdY) 
 
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nv, nc, dx0, rearth, dy, i, nu, l, &
+                              isd, m, ice, n, clats, j, jsd, npol 
          IMPLICIT NONE
 
          REAL,    INTENT( IN)::  CVQ(-9:NC)
@@ -988,11 +1018,11 @@ CelLop:  DO  ISEA=npseatr, npseand
            M=ISD(6,i)
 
 !    Multi-resolution SMC grid requires flux multiplied by face factor.
-           CNST1=FLOAT( ISD(3,i) ) 
+           CNST1=REAL( ISD(3,i) ) 
 
 !    Face bounding cell lengths and central gradient
-           CNST2=FLOAT( ICE(3,L) ) 
-           CNST3=FLOAT( ICE(3,M) ) 
+           CNST2=REAL( ICE(3,L) ) 
+           CNST3=REAL( ICE(3,M) ) 
 
            CNST5=CNST1*(CVF(M)-CVF(L))/(CNST2+CNST3)
 
@@ -1083,7 +1113,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 !
        SUBROUTINE SMCAverg(CVQ) 
 
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nc,  i, nu, l, isd, m, j, nv, jsd, n, npol, ice
          IMPLICIT NONE
 
          REAL,    INTENT(INOUT)::  CVQ(-9:NC)
@@ -1161,14 +1191,14 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li
 
        SUBROUTINE SMCGtCrfr(CoRfr, SpeTHK)
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: ndir, nfrq, spegct, spectr, j, k, l, m, n
          IMPLICIT NONE
 
          REAL, INTENT(IN)   ::  CoRfr(NDIR, NFrq)
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          INTEGER ::  NRefr
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-!$ACC Routine SEQ
+!!$ACC Routine SEQ
 !$ !Li   Rotation is done for all frequency bins at each frequency so
 !$ !Li   the frequency loop can be parallelised.  JGLi16Nov2017
 
@@ -1197,7 +1227,7 @@ CelLop:  DO  ISEA=npseatr, npseand
            K= MOD( INT(CNST5), NDIR ) 
 
 !    Partitioning faraction of the spectral component
-           CNST1=CNST5 - FLOAT( INT(CNST5) )
+           CNST1=CNST5 - REAL( INT(CNST5) )
            CNST2=1.0 - CNST1
 
 !    For positive turning case
@@ -1255,14 +1285,14 @@ CelLop:  DO  ISEA=npseatr, npseand
 !Li
 
        SUBROUTINE SMCkUNO2(CoRfr, SpeTHK, DKC, DKS)
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: ndir, nfrq, xfr, n, j, ctmax
 
          IMPLICIT NONE
          REAL, INTENT(IN)   ::  CoRfr(NDIR, 0:NFrq), DKC(0:NFrq+1), DKS(-1:NFrq+1)
          REAL, INTENT(INOUT):: SpeTHK(NDIR, NFrq)
          REAL, Dimension(-1:NFrq+2):: SpeRfr, Spectf, SpeFlx
          REAL:: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
-!$ACC Routine SEQ
+!!$ACC Routine SEQ
 !Li  Cell and side indices for k-dimension are arranged as 
 !    Cell:    | -1 | 0 | 1 | 2 | ... | NK | NK+1 | NK+2 |
 !    Side:        -1   0   1   2 ...     NK     NK+1
@@ -1347,7 +1377,9 @@ CelLop:  DO  ISEA=npseatr, npseand
 ! also assigned here.  DHDX, DHDY are used for refraction at present.
 ! It has to be rotated to map-east system in the Arctic part.
        SUBROUTINE SMCDHXY
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nc, hcel, dhdx, dhdy, cx, dhlmt, n, &
+                              nglo, angcd, d2rad, l, i, ndir, ecos, &
+                              esin, refran, pie, dth, arctic
          IMPLICIT NONE
          REAL :: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
          REAL, Dimension(NC) :: GrHx, GrHy
@@ -1372,7 +1404,7 @@ CelLop:  DO  ISEA=npseatr, npseand
 
 !Li  Depth gradient in the Arctic part has to be rotated into 
 !Li  the map-east system for calculation of refraction. 
-       IF( Arctic .AND. n .GT. NGLO ) THEN
+       IF( Arctic .AND. (n .GT. NGLO) ) THEN
           CNST0 = AngCD(n)*D2RAD
           CNST1 = DHDX(n)*COS(CNST0) - DHDY(n)*SIN(CNST0)
           CNST2 = DHDX(n)*SIN(CNST0) + DHDY(n)*COS(CNST0)
@@ -1417,7 +1449,8 @@ CelLop:  DO  ISEA=npseatr, npseand
 !                 JGLi23Mar2016
 !
        SUBROUTINE SMCDCXY
-         USE CONSTANTS
+         USE CONSTANTS, ONLY: nc, cx, dcxdx,  n, nglo, angcd, d2rad, &
+                              dcxdy, cy, dcydx, dcydy, arctic
          IMPLICIT NONE
 
          REAL :: CNST, CNST0, CNST1, CNST2, CNST3, CNST4, CNST5, CNST6
